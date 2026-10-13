@@ -5,80 +5,81 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rubik:wght@400;500;700&display=swap">
 <style>
-/* Layout: one column like a wooden farm sign: status strip, game window in a frame, tool belt, touch pad */
+/* Layout: one column. Terraria-style UI: navy night sky behind, blue inventory panels with gold highlights */
 :root{
-  --bark:#3a2a1f; --bark-2:#4b3627; --bark-3:#6a4b33;
-  --straw:#f2e6bf; --ink:#2b1f16; --leaf:#4f8f34; --coin:#f0bf45; --muted:#c9b48a;
-  --up:#3c7d22; --down:#b23a26;
+  --sky:#0f1638; --panel:#2c3c8c; --panel-2:#3d4fa8; --edge:#151b4a;
+  --text:#ffffff; --muted:#aab4e8; --gold:#ffd24a; --leaf:#2f9e3a;
+  --up:#7be05a; --down:#ff7a5c;
   --f-pixel:"Press Start 2P","Courier New",monospace;
   --f-ui:"Rubik","Segoe UI",system-ui,sans-serif;
   color-scheme:dark;
 }
 [hidden]{display:none!important}
-html,body{background:var(--bark);color:var(--straw)}
+html,body{background:var(--sky);color:var(--text)}
 body{font-family:var(--f-ui);font-size:16px;line-height:1.4}
-.wrap{max-width:840px;margin:0 auto;padding-inline:16px;padding-block:12px 28px;display:flex;flex-direction:column;gap:10px}
+.wrap{max-width:900px;margin:0 auto;padding-inline:16px;padding-block:12px 28px;display:flex;flex-direction:column;gap:10px}
 header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-h1{font-family:var(--f-pixel);font-size:clamp(16px,3.6vw,24px);line-height:1.3;margin:0;font-weight:400;letter-spacing:.02em;color:var(--coin);text-shadow:2px 2px 0 var(--ink);text-wrap:balance}
+h1{font-family:var(--f-pixel);font-size:clamp(16px,3.6vw,24px);line-height:1.3;margin:0;font-weight:400;color:var(--gold);text-shadow:2px 2px 0 #000;text-wrap:balance}
 .tools{display:flex;gap:6px}
-.mini{font:inherit;font-size:14px;background:var(--bark-2);color:var(--straw);border:2px solid var(--bark-3);padding:4px 10px;cursor:pointer}
-.mini:hover{border-color:var(--coin)}
+.mini{font:inherit;font-size:14px;background:var(--panel);color:var(--text);border:2px solid var(--edge);border-radius:6px;padding:4px 10px;cursor:pointer}
+.mini:hover{border-color:var(--gold)}
 .hud{display:flex;flex-wrap:wrap;gap:6px}
-.chip{background:var(--bark-2);border:2px solid var(--bark-3);padding:3px 8px;display:flex;gap:6px;align-items:center;font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip{background:var(--panel);border:2px solid var(--edge);border-radius:6px;padding:3px 8px;display:flex;gap:6px;align-items:center;font-variant-numeric:tabular-nums;white-space:nowrap;text-shadow:1px 1px 0 #000}
 .chip .k{color:var(--muted);font-size:13px}
-.chip b{color:var(--coin);font-weight:600}
+.chip b{color:var(--gold);font-weight:500}
 .chip.goal{flex:1 1 220px;min-width:0}
-.bar{height:8px;background:var(--ink);flex:1;min-width:50px;border:1px solid var(--bark-3)}
-.bar i{display:block;height:100%;background:var(--leaf);width:0;transition:width .3s}
-.stage{position:relative;border:4px solid var(--bark-3);box-shadow:0 0 0 3px var(--ink);background:#1b140f}
-#game{display:block;width:100%;height:auto;aspect-ratio:256/176;image-rendering:crisp-edges;image-rendering:pixelated;touch-action:none;cursor:pointer}
-.toast{position:absolute;left:50%;bottom:8px;transform:translateX(-50%) translateY(6px);max-width:calc(100% - 24px);background:rgba(43,31,22,.92);border:2px solid var(--coin);padding:5px 10px;text-align:center;font-size:14px;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none}
+.bar{height:8px;background:var(--edge);flex:1;min-width:50px;border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--gold);width:0;transition:width .3s}
+.stage{position:relative;border:3px solid var(--edge);border-radius:6px;box-shadow:0 0 0 2px var(--panel-2);overflow:hidden;background:#000}
+#game{display:block;width:100%;height:auto;aspect-ratio:384/240;image-rendering:crisp-edges;image-rendering:pixelated;touch-action:none;cursor:pointer}
+.toast{position:absolute;left:50%;bottom:8px;transform:translateX(-50%) translateY(6px);max-width:calc(100% - 24px);background:rgba(21,27,74,.92);border:2px solid var(--gold);border-radius:6px;padding:5px 10px;text-align:center;font-size:14px;text-shadow:1px 1px 0 #000;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
-.holding{font-size:14px;color:var(--muted);min-height:1.35em}
-.holding b{color:var(--straw);font-weight:600}
+.holding{font-size:14px;color:var(--muted);min-height:1.4em}
+.holding b{color:var(--text);font-weight:500}
 .belt{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
-.slot{position:relative;background:var(--bark-2);border:2px solid var(--bark-3);padding:8px 0 6px;display:flex;justify-content:center;cursor:pointer;min-width:0;color:var(--straw);font:inherit}
+.slot{position:relative;background:rgba(61,79,168,.85);border:2px solid var(--edge);border-radius:6px;padding:8px 0 6px;display:flex;justify-content:center;cursor:pointer;min-width:0;color:var(--text);font:inherit;text-shadow:1px 1px 0 #000}
 .slot canvas{width:32px;height:32px;image-rendering:pixelated}
-.slot[aria-pressed="true"]{border-color:var(--coin);background:var(--bark-3);box-shadow:inset 0 0 0 1px var(--coin)}
+.slot[aria-pressed="true"]{border-color:var(--gold);background:var(--panel-2);box-shadow:0 0 0 1px var(--gold)}
 .slot .key{position:absolute;top:1px;left:4px;font-size:11px;color:var(--muted)}
 .slot .n{position:absolute;bottom:1px;right:4px;font-size:12px;font-variant-numeric:tabular-nums}
 .slot.none canvas{opacity:.35}
 .kbd{font-size:13px;color:var(--muted)}
 .pad-row{display:none;align-items:center;justify-content:space-between;gap:12px;padding-top:4px}
 .pad{display:grid;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,56px);gap:4px}
-.pad button,.act{font:inherit;background:var(--bark-2);color:var(--straw);border:3px solid var(--bark-3);touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
+.pad button,.act{font:inherit;background:var(--panel);color:var(--text);border:2px solid var(--edge);border-radius:8px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
 .pad button{font-size:22px}
-.pad button:active,.act:active{background:var(--bark-3);border-color:var(--coin)}
-.act{width:96px;height:96px;border-radius:50%;background:var(--leaf);border-color:var(--ink);font-size:16px;font-weight:600;color:#fff}
+.pad button:active,.act:active{background:var(--panel-2);border-color:var(--gold)}
+.act{width:96px;height:96px;border-radius:50%;background:var(--leaf);border-color:var(--edge);font-size:16px;font-weight:500;text-shadow:1px 1px 0 #000}
 @media (hover:none),(pointer:coarse){.pad-row{display:flex}.kbd{display:none}}
-.overlay{position:fixed;inset:0;background:rgba(20,14,10,.74);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
-.panel{background:var(--straw);color:var(--ink);border:4px solid var(--ink);box-shadow:6px 6px 0 rgba(0,0,0,.35);max-width:500px;width:100%;max-height:calc(100% - 8px);overflow:auto;padding:18px}
-.panel h2{margin:0 0 10px;font-family:var(--f-pixel);font-size:17px;line-height:1.4;font-weight:400;text-wrap:balance}
-.panel h3{margin:14px 0 6px;font-size:17px}
+.overlay{position:fixed;inset:0;background:rgba(5,8,24,.7);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.panel{background:rgba(44,60,140,.97);color:var(--text);border:3px solid var(--edge);border-radius:8px;box-shadow:0 0 0 2px var(--panel-2),6px 6px 0 rgba(0,0,0,.4);max-width:500px;width:100%;max-height:calc(100% - 8px);overflow:auto;padding:18px;text-shadow:1px 1px 0 rgba(0,0,0,.6)}
+.panel h2{margin:0 0 10px;font-family:var(--f-pixel);font-size:16px;line-height:1.45;font-weight:400;color:var(--gold);text-shadow:2px 2px 0 #000;text-wrap:balance}
+.panel h3{margin:14px 0 6px;font-size:17px;color:var(--gold)}
 .panel p{margin:0 0 10px}
 .panel ol{margin:0 0 10px;padding-left:22px}
 .panel li{margin-bottom:3px}
 .small{font-size:14px}
-.say{font-style:italic}
+.say{font-style:italic;color:#dfe5ff}
 .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.btn{font:inherit;background:var(--leaf);color:#fff;border:3px solid var(--ink);padding:6px 12px;cursor:pointer;box-shadow:0 3px 0 var(--ink)}
-.btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
-.btn.alt{background:#fff8e0;color:var(--ink)}
-.btn.warn{background:var(--down)}
-.btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:0 3px 0 var(--ink)}
+.btn{font:inherit;background:var(--leaf);color:#fff;border:2px solid var(--edge);border-radius:6px;padding:6px 12px;cursor:pointer;box-shadow:0 3px 0 var(--edge);text-shadow:1px 1px 0 #000}
+.btn:hover{border-color:var(--gold)}
+.btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--edge)}
+.btn.alt{background:var(--panel-2)}
+.btn.warn{background:#b8402c}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:0 3px 0 var(--edge);border-color:var(--edge)}
 .btn.sm{padding:3px 8px;font-size:14px}
 .tabs{display:flex;gap:6px;margin:8px 0}
-.tab{font:inherit;background:transparent;border:3px solid var(--ink);color:var(--ink);padding:4px 12px;cursor:pointer}
-.tab[aria-selected="true"]{background:var(--ink);color:var(--straw)}
+.tab{font:inherit;background:transparent;border:2px solid var(--edge);border-radius:6px;color:var(--text);padding:4px 12px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--edge);border-color:var(--gold);color:var(--gold)}
 .money{font-variant-numeric:tabular-nums}
-.money b{font-size:20px}
-.row{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 0;border-bottom:2px dashed rgba(43,31,22,.22)}
+.money b{font-size:20px;color:var(--gold)}
+.row{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(170,180,232,.25)}
 .row canvas{width:32px;height:32px;image-rendering:pixelated}
-.row .nm{font-weight:600}
-.row .sub{font-size:13px;opacity:.8}
+.row .nm{font-weight:500}
+.row .sub{font-size:13px;color:var(--muted)}
 .row .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .up{color:var(--up)} .down{color:var(--down)}
-:focus-visible{outline:3px solid var(--coin);outline-offset:2px}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 @media (max-width:420px){.row{grid-template-columns:32px minmax(0,1fr)}.row .acts{grid-column:1 / -1;justify-content:flex-start}}
 @media (prefers-reduced-motion:reduce){.toast,.bar i{transition:none}}
 </style>
@@ -102,7 +103,7 @@ h1{font-family:var(--f-pixel);font-size:clamp(16px,3.6vw,24px);line-height:1.3;m
   </div>
 
   <div class="stage">
-    <canvas id="game" width="256" height="176" aria-label="Игровое поле: огород, дом, колодец и рынок"></canvas>
+    <canvas id="game" width="384" height="240" aria-label="Игровое поле: огород, дом, колодец и рынок"></canvas>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
@@ -125,19 +126,19 @@ h1{font-family:var(--f-pixel);font-size:clamp(16px,3.6vw,24px);line-height:1.3;m
 <script>
 (() => {
 'use strict';
-const T = 16, VW = 16, VH = 11, W = 28, H = 18, GOAL = 2500, SAVE_KEY = 'dedushkin-ogorod-v1';
+const T = 16, VW = 24, VH = 15, W = 36, H = 22, GOAL = 2500, SAVE_KEY = 'dedushkin-ogorod-v2';
 const $ = s => document.querySelector(s);
 const cv = $('#game'), ctx = cv.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const C = {
-  grass:'#6aa84f', grassD:'#538f3c', grassL:'#86c063', farm:'#77ad57',
-  path:'#cfae74', pathD:'#b5925a', pathL:'#e0c590',
-  water:'#3f7fc4', waterD:'#30679f', waterL:'#8cc0ee',
-  soil:'#8b5a34', soilD:'#6d4425', soilW:'#5b381f', soilWD:'#432815',
-  fence:'#a4733f', fenceD:'#6b4627', fenceL:'#c8955c',
-  trunk:'#6b4423', trunkD:'#4b2e17', leaf:'#3f8a3a', leafD:'#2a6328', leafL:'#62b04a',
-  stone:'#9a9a8e', stoneD:'#6f6f66', stoneL:'#b8b8ac', ink:'#2b1f16'
+  grass:'#33a532', grassD:'#22802a', grassL:'#62d04e', farm:'#976b4b', farmD:'#7a5236', farmL:'#b0835c',
+  path:'#d6c27a', pathD:'#b9a35c', pathL:'#ecdc9c',
+  water:'#2650d8', waterD:'#1a37a0', waterL:'#6a98f4',
+  soil:'#6e4a30', soilD:'#553823', soilW:'#4a3020', soilWD:'#36220f',
+  fence:'#a97c50', fenceD:'#6e4b2c', fenceL:'#c99a66',
+  trunk:'#8a5a33', trunkD:'#5e3b1f', leaf:'#1fa31f', leafD:'#137013', leafL:'#4fd04f',
+  stone:'#808080', stoneD:'#5a5a5a', stoneL:'#a6a6a6', ink:'#0b0e22', coin:'#ffd24a'
 };
 
 const CROPS = {
@@ -151,8 +152,9 @@ const CROPS = {
 const KEYS = Object.keys(CROPS);
 const TOOLS = [{id:'hoe', name:'Мотыга'}, {id:'can', name:'Лейка'}, ...KEYS.map(k => ({id:'seed', k, name:CROPS[k].seedName}))];
 const UPGRADES = [
+  {id:'field2', name:'Расчистить вторую треть',  sub:'Ещё 24 грядки в середине огорода', cost:150},
+  {id:'field3', name:'Расчистить последнюю треть', sub:'Ещё 24 грядки справа. Сначала нужна вторая треть', cost:300},
   {id:'can',   name:'Большая лейка',     sub:'Вмещает 30 л вместо 10',            cost:250},
-  {id:'field', name:'Расчистить участок', sub:'Ещё 30 грядок справа на огороде',   cost:400},
   {id:'house', name:'Отремонтировать дом', sub:'Главная цель: вернуть дому жизнь', cost:GOAL}
 ];
 const GREET = [
@@ -162,7 +164,7 @@ const GREET = [
   'Семена свежие, только утром привезли.'
 ];
 const DIRS = {up:[0,-1], down:[0,1], left:[-1,0], right:[1,0]};
-const WALK = '.,=fF', INTERACT = 'fFDWM~H';
+const WALK = '.,=fFG', INTERACT = 'fFGDWM~H';
 
 function hash(a, b, c = 0) {
   let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(c | 0, 1274126177);
@@ -176,7 +178,7 @@ function newState() {
   const seeds = {}, produce = {};
   KEYS.forEach(k => { seeds[k] = 0; produce[k] = 0; });
   seeds.carrot = 6; seeds.potato = 3;
-  return {v:1, day:1, min:360, money:100, water:10, cap:10, expanded:false, house:false,
+  return {v:1, day:1, min:360, money:100, water:10, cap:10, zones:1, house:false,
           plots:{}, seeds, produce, tool:0, px:4, py:5, face:'down', intro:false, lateWarned:false};
 }
 function merge(s) {
@@ -205,16 +207,17 @@ function buildMap() {
   for (let y = 0; y < H; y++) { set(0, y, 'T'); set(W - 1, y, 'T'); }
   rect(2, 1, 5, 3, 'H'); set(4, 3, 'D');
   set(9, 2, 'W');
-  rect(4, 4, 4, 13, '='); rect(4, 8, 7, 8, '='); rect(4, 13, 22, 13, '='); rect(22, 9, 22, 13, '=');
-  for (let x = 7; x <= 18; x++) { set(x, 5, '#'); set(x, 12, '#'); }
-  for (let y = 5; y <= 12; y++) { set(7, y, '#'); set(18, y, '#'); }
-  set(7, 8, '='); set(12, 12, '=');
-  rect(8, 6, 17, 11, 'F'); rect(8, 6, 12, 11, 'f');
-  if (state.expanded) rect(13, 6, 17, 11, 'f');
-  rect(20, 6, 24, 8, 'M');
-  rect(1, 14, 5, 16, '~');
-  [[20,2],[24,2],[25,3],[14,2],[26,9],[25,11],[26,14],[24,15],[17,15],[10,15],[13,16],[7,15],[20,16]].forEach(([x, y]) => set(x, y, 'T'));
-  [[16,2],[6,10],[20,11],[8,14]].forEach(([x, y]) => set(x, y, 'B'));
+  rect(4, 4, 4, 15, '='); rect(4, 8, 7, 8, '='); rect(4, 15, 28, 15, '='); rect(28, 10, 28, 15, '='); rect(13, 12, 13, 15, '=');
+  for (let x = 7; x <= 20; x++) { set(x, 5, '#'); set(x, 12, '#'); }
+  for (let y = 5; y <= 12; y++) { set(7, y, '#'); set(20, y, '#'); }
+  set(7, 8, '='); set(13, 12, '=');
+  rect(8, 6, 11, 11, 'f');
+  rect(12, 6, 15, 11, state.zones >= 2 ? 'f' : 'F');
+  rect(16, 6, 19, 11, state.zones >= 3 ? 'f' : 'G');
+  rect(26, 7, 30, 9, 'M');
+  rect(1, 16, 5, 19, '~'); rect(6, 17, 6, 18, '~');
+  [[20,2],[24,2],[25,3],[14,2],[30,2],[33,3],[34,6],[32,12],[33,13],[34,17],[31,18],[26,18],[22,17],[17,18],[11,17],[14,19],[9,19],[23,11],[24,4],[2,12],[1,9]].forEach(([x, y]) => set(x, y, 'T'));
+  [[16,2],[6,10],[24,10],[8,16],[31,4],[19,19],[29,19]].forEach(([x, y]) => set(x, y, 'B'));
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++)
     if (map[y][x] === '.' && hash(x, y, 7) < 0.09) map[y][x] = ',';
 }
@@ -242,8 +245,13 @@ function drawFlowers(g, x, y) {
     P(fx, fy, 3, 3, cols[Math.floor(hash(x, y, i + 60) * 3)]); P(fx + 1, fy + 1, 1, 1, '#c8922a');
   }
 }
+function drawDirt(g, x, y) {
+  const P = painter(g, x * T, y * T);
+  P(0, 0, 16, 16, C.farm);
+  for (let i = 0; i < 7; i++) P(Math.floor(hash(x, y, i + 70) * 15), Math.floor(hash(x, y, i + 80) * 15), 2, 1, i % 2 ? C.farmD : C.farmL);
+}
 function drawLocked(g, x, y) {
-  drawGrass(g, x, y, C.farm);
+  drawGrass(g, x, y);
   const P = painter(g, x * T, y * T), r = hash(x, y, 9);
   if (r < 0.35) { P(4, 6, 7, 5, C.stone); P(4, 6, 7, 1, C.stoneL); P(5, 10, 6, 1, C.stoneD); }
   else if (r < 0.7) { P(3, 4, 1, 6, C.leafD); P(5, 2, 1, 8, C.leafD); P(7, 5, 1, 5, C.leafD); P(10, 7, 1, 5, C.leafD); P(12, 5, 1, 6, C.leafD); }
@@ -303,7 +311,7 @@ function drawHouse(g, repaired) {
   if (!repaired) { P(14, 10, 5, 2, C.ink); P(40, 14, 5, 2, C.ink); P(22, 38, 3, 6, '#3b2a1f'); P(56, 24, 2, 8, '#3b2a1f'); }
 }
 function drawMarket(g) {
-  const P = painter(g, 20 * T, 6 * T);
+  const P = painter(g, 26 * T, 7 * T);
   P(2, 12, 76, 22, '#8b6a45');
   for (let x = 2; x < 78; x += 8) P(x, 12, 1, 22, '#6f5235');
   P(2, 10, 4, 38, C.fenceD); P(74, 10, 4, 38, C.fenceD);
@@ -333,8 +341,8 @@ function buildBg() {
     else if (ch === 'T') drawTree(g, x, y);
     else if (ch === 'B') drawBush(g, x, y);
     else if (ch === 'W') drawWell(g, x, y);
-    else if (ch === 'F') drawLocked(g, x, y);
-    else if (ch === 'f') drawGrass(g, x, y, C.farm);
+    else if (ch === 'F' || ch === 'G') drawLocked(g, x, y);
+    else if (ch === 'f') drawDirt(g, x, y);
     else if (ch === '~') { g.fillStyle = C.water; g.fillRect(x * T, y * T, T, T); }
     else drawGrass(g, x, y);
   }
@@ -490,7 +498,8 @@ function act(tx, ty) {
     state.water = state.cap; SFX.water(); puff(tx, ty, C.waterL, 8);
     return toast('Лейка наполнена: ' + state.cap + ' л.');
   }
-  if (c === 'F') { SFX.nope(); return toast('Тут всё заросло. Расчистить участок можно на рынке.'); }
+  if (c === 'F') { SFX.nope(); return toast('Тут всё заросло. Расчистить вторую треть огорода можно на рынке за 150 монет.'); }
+  if (c === 'G') { SFX.nope(); return toast('Тут всё заросло. Эту треть можно расчистить на рынке за 300 монет, после второй.'); }
   if (c === 'H') return toast(state.house ? 'Дедушкин дом. Теперь в нём тепло и уютно.' : 'Дедушкин дом. Крыша течёт, доски скрипят. Нужен ремонт.');
   const tool = TOOLS[state.tool];
   if (c !== 'f') {
@@ -573,11 +582,11 @@ overlay.addEventListener('click', e => { if (e.target === overlay && panelClosab
 const HOW = `
   <h3>Как играть</h3>
   <ol>
-    <li>Мотыгой вскопайте землю за забором.</li>
+    <li>Мотыгой вскопайте землю на расчищенной части огорода за забором (бурая земля слева). Остальные две трети заросли, их расчищают на рынке.</li>
     <li>Выберите семена и посадите их на вскопанную грядку.</li>
     <li>Полейте грядку из лейки. Воду набирают в колодце или пруду.</li>
     <li>Ночью растения подрастают. Без полива — вдвое медленнее.</li>
-    <li>Спелый урожай соберите и продайте тёте Гале на рынке справа.</li>
+    <li>Спелый урожай соберите и продайте тёте Гале на рынке справа (палатка с полосатым навесом).</li>
     <li>Чтобы лечь спать и начать новый день, подойдите к двери дома.</li>
   </ol>
   <h3>Управление</h3>
@@ -659,10 +668,11 @@ function openShop(tab) {
     });
     body += '<h3>Улучшения</h3>';
     UPGRADES.forEach(u => {
-      const done = (u.id === 'can' && state.cap > 10) || (u.id === 'field' && state.expanded) || (u.id === 'house' && state.house);
-      const icon = u.id === 'can' ? 'can' : u.id === 'field' ? 'field' : 'house';
+      const done = (u.id === 'can' && state.cap > 10) || (u.id === 'field2' && state.zones >= 2) || (u.id === 'field3' && state.zones >= 3) || (u.id === 'house' && state.house);
+      const locked = u.id === 'field3' && state.zones < 2;
+      const icon = u.id === 'can' ? 'can' : u.id === 'house' ? 'house' : 'field';
       body += `<div class="row"><span data-icon="${icon}"></span><div><div class="nm">${u.name}</div><div class="sub">${u.sub}</div></div>
-        <div class="acts"><button class="btn sm" data-up="${u.id}" ${done || state.money < u.cost ? 'disabled' : ''}>${done ? 'Куплено' : u.cost + ' мон.'}</button></div></div>`;
+        <div class="acts"><button class="btn sm" data-up="${u.id}" ${done || locked || state.money < u.cost ? 'disabled' : ''}>${done ? 'Куплено' : u.cost + ' мон.'}</button></div></div>`;
     });
     body += `<div class="btns"><button class="btn alt" data-close>Уйти</button></div>`;
   }
@@ -687,10 +697,10 @@ function shopClick(b) {
   }
   if (ds.up) {
     const u = UPGRADES.find(x => x.id === ds.up);
-    if (u && state.money >= u.cost) {
+    if (u && state.money >= u.cost && !(u.id === 'field3' && state.zones < 2)) {
       state.money -= u.cost; SFX.coin();
       if (u.id === 'can') { state.cap = 30; state.water = 30; }
-      if (u.id === 'field') { state.expanded = true; buildMap(); bgDirty = true; }
+      if (u.id === 'field2' || u.id === 'field3') { state.zones = u.id === 'field2' ? 2 : 3; buildMap(); bgDirty = true; }
       if (u.id === 'house') { state.house = true; bgDirty = true; save(); return openWin(); }
     }
   }
