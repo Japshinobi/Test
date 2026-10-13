@@ -1,0 +1,914 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Дедушкин огород</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rubik:wght@400;500;700&display=swap">
+<style>
+/* Layout: one column like a wooden farm sign: status strip, game window in a frame, tool belt, touch pad */
+:root{
+  --bark:#3a2a1f; --bark-2:#4b3627; --bark-3:#6a4b33;
+  --straw:#f2e6bf; --ink:#2b1f16; --leaf:#4f8f34; --coin:#f0bf45; --muted:#c9b48a;
+  --up:#3c7d22; --down:#b23a26;
+  --f-pixel:"Press Start 2P","Courier New",monospace;
+  --f-ui:"Rubik","Segoe UI",system-ui,sans-serif;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{background:var(--bark);color:var(--straw)}
+body{font-family:var(--f-ui);font-size:16px;line-height:1.4}
+.wrap{max-width:840px;margin:0 auto;padding-inline:16px;padding-block:12px 28px;display:flex;flex-direction:column;gap:10px}
+header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+h1{font-family:var(--f-pixel);font-size:clamp(16px,3.6vw,24px);line-height:1.3;margin:0;font-weight:400;letter-spacing:.02em;color:var(--coin);text-shadow:2px 2px 0 var(--ink);text-wrap:balance}
+.tools{display:flex;gap:6px}
+.mini{font:inherit;font-size:14px;background:var(--bark-2);color:var(--straw);border:2px solid var(--bark-3);padding:4px 10px;cursor:pointer}
+.mini:hover{border-color:var(--coin)}
+.hud{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--bark-2);border:2px solid var(--bark-3);padding:3px 8px;display:flex;gap:6px;align-items:center;font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip .k{color:var(--muted);font-size:13px}
+.chip b{color:var(--coin);font-weight:600}
+.chip.goal{flex:1 1 220px;min-width:0}
+.bar{height:8px;background:var(--ink);flex:1;min-width:50px;border:1px solid var(--bark-3)}
+.bar i{display:block;height:100%;background:var(--leaf);width:0;transition:width .3s}
+.stage{position:relative;border:4px solid var(--bark-3);box-shadow:0 0 0 3px var(--ink);background:#1b140f}
+#game{display:block;width:100%;height:auto;aspect-ratio:256/176;image-rendering:crisp-edges;image-rendering:pixelated;touch-action:none;cursor:pointer}
+.toast{position:absolute;left:50%;bottom:8px;transform:translateX(-50%) translateY(6px);max-width:calc(100% - 24px);background:rgba(43,31,22,.92);border:2px solid var(--coin);padding:5px 10px;text-align:center;font-size:14px;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.holding{font-size:14px;color:var(--muted);min-height:1.35em}
+.holding b{color:var(--straw);font-weight:600}
+.belt{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.slot{position:relative;background:var(--bark-2);border:2px solid var(--bark-3);padding:8px 0 6px;display:flex;justify-content:center;cursor:pointer;min-width:0;color:var(--straw);font:inherit}
+.slot canvas{width:32px;height:32px;image-rendering:pixelated}
+.slot[aria-pressed="true"]{border-color:var(--coin);background:var(--bark-3);box-shadow:inset 0 0 0 1px var(--coin)}
+.slot .key{position:absolute;top:1px;left:4px;font-size:11px;color:var(--muted)}
+.slot .n{position:absolute;bottom:1px;right:4px;font-size:12px;font-variant-numeric:tabular-nums}
+.slot.none canvas{opacity:.35}
+.kbd{font-size:13px;color:var(--muted)}
+.pad-row{display:none;align-items:center;justify-content:space-between;gap:12px;padding-top:4px}
+.pad{display:grid;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,56px);gap:4px}
+.pad button,.act{font:inherit;background:var(--bark-2);color:var(--straw);border:3px solid var(--bark-3);touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
+.pad button{font-size:22px}
+.pad button:active,.act:active{background:var(--bark-3);border-color:var(--coin)}
+.act{width:96px;height:96px;border-radius:50%;background:var(--leaf);border-color:var(--ink);font-size:16px;font-weight:600;color:#fff}
+@media (hover:none),(pointer:coarse){.pad-row{display:flex}.kbd{display:none}}
+.overlay{position:fixed;inset:0;background:rgba(20,14,10,.74);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.panel{background:var(--straw);color:var(--ink);border:4px solid var(--ink);box-shadow:6px 6px 0 rgba(0,0,0,.35);max-width:500px;width:100%;max-height:calc(100% - 8px);overflow:auto;padding:18px}
+.panel h2{margin:0 0 10px;font-family:var(--f-pixel);font-size:17px;line-height:1.4;font-weight:400;text-wrap:balance}
+.panel h3{margin:14px 0 6px;font-size:17px}
+.panel p{margin:0 0 10px}
+.panel ol{margin:0 0 10px;padding-left:22px}
+.panel li{margin-bottom:3px}
+.small{font-size:14px}
+.say{font-style:italic}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.btn{font:inherit;background:var(--leaf);color:#fff;border:3px solid var(--ink);padding:6px 12px;cursor:pointer;box-shadow:0 3px 0 var(--ink)}
+.btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
+.btn.alt{background:#fff8e0;color:var(--ink)}
+.btn.warn{background:var(--down)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:0 3px 0 var(--ink)}
+.btn.sm{padding:3px 8px;font-size:14px}
+.tabs{display:flex;gap:6px;margin:8px 0}
+.tab{font:inherit;background:transparent;border:3px solid var(--ink);color:var(--ink);padding:4px 12px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--straw)}
+.money{font-variant-numeric:tabular-nums}
+.money b{font-size:20px}
+.row{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 0;border-bottom:2px dashed rgba(43,31,22,.22)}
+.row canvas{width:32px;height:32px;image-rendering:pixelated}
+.row .nm{font-weight:600}
+.row .sub{font-size:13px;opacity:.8}
+.row .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.up{color:var(--up)} .down{color:var(--down)}
+:focus-visible{outline:3px solid var(--coin);outline-offset:2px}
+@media (max-width:420px){.row{grid-template-columns:32px minmax(0,1fr)}.row .acts{grid-column:1 / -1;justify-content:flex-start}}
+@media (prefers-reduced-motion:reduce){.toast,.bar i{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Дедушкин огород</h1>
+    <div class="tools">
+      <button class="mini" id="helpBtn" type="button">Справка</button>
+      <button class="mini" id="soundBtn" type="button">Звук: вкл</button>
+    </div>
+  </header>
+
+  <div class="hud">
+    <div class="chip"><span id="day">День 1</span></div>
+    <div class="chip"><span id="clock">6:00</span><span class="k" id="part">утро</span></div>
+    <div class="chip"><span class="k">Монеты</span><b id="money">100</b></div>
+    <div class="chip"><span class="k">Вода</span><span id="water">10/10</span></div>
+    <div class="chip"><span class="k">Корзина</span><span id="basket">0</span></div>
+    <div class="chip goal"><span class="k" id="goalTxt">Ремонт дома</span><span class="bar"><i id="goalBar"></i></span></div>
+  </div>
+
+  <div class="stage">
+    <canvas id="game" width="256" height="176" aria-label="Игровое поле: огород, дом, колодец и рынок"></canvas>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <div class="holding" id="holding"></div>
+  <div class="belt" id="belt"></div>
+  <div class="kbd">Стрелки или WASD — ходить · Пробел или E — действие · 1–8 — выбрать предмет · Щелчок по клетке — подойти и сделать</div>
+
+  <div class="pad-row">
+    <div class="pad">
+      <span></span><button type="button" data-dir="up" aria-label="Вверх">▲</button><span></span>
+      <button type="button" data-dir="left" aria-label="Влево">◀</button><span></span><button type="button" data-dir="right" aria-label="Вправо">▶</button>
+      <span></span><button type="button" data-dir="down" aria-label="Вниз">▼</button><span></span>
+    </div>
+    <button class="act" id="actBtn" type="button">Действие</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" hidden><div class="panel" id="panel" role="dialog" aria-modal="true"></div></div>
+
+<script>
+(() => {
+'use strict';
+const T = 16, VW = 16, VH = 11, W = 28, H = 18, GOAL = 2500, SAVE_KEY = 'dedushkin-ogorod-v1';
+const $ = s => document.querySelector(s);
+const cv = $('#game'), ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const C = {
+  grass:'#6aa84f', grassD:'#538f3c', grassL:'#86c063', farm:'#77ad57',
+  path:'#cfae74', pathD:'#b5925a', pathL:'#e0c590',
+  water:'#3f7fc4', waterD:'#30679f', waterL:'#8cc0ee',
+  soil:'#8b5a34', soilD:'#6d4425', soilW:'#5b381f', soilWD:'#432815',
+  fence:'#a4733f', fenceD:'#6b4627', fenceL:'#c8955c',
+  trunk:'#6b4423', trunkD:'#4b2e17', leaf:'#3f8a3a', leafD:'#2a6328', leafL:'#62b04a',
+  stone:'#9a9a8e', stoneD:'#6f6f66', stoneL:'#b8b8ac', ink:'#2b1f16'
+};
+
+const CROPS = {
+  carrot:    {name:'Морковь',   product:'Морковь',   seedName:'Семена моркови',    seed:10,  sell:30,  grow:3,  color:'#e8832a'},
+  potato:    {name:'Картофель', product:'Картофель', seedName:'Семенной картофель',seed:15,  sell:45,  grow:4,  color:'#c49a62'},
+  strawberry:{name:'Клубника',  product:'Клубника',  seedName:'Рассада клубники',  seed:30,  sell:25,  grow:4,  regrow:2, color:'#d63b45'},
+  tomato:    {name:'Помидор',   product:'Помидоры',  seedName:'Семена томатов',    seed:25,  sell:22,  grow:5,  regrow:2, color:'#e0402c'},
+  pumpkin:   {name:'Тыква',     product:'Тыква',     seedName:'Семена тыквы',      seed:50,  sell:180, grow:7,  color:'#e98a1f'},
+  apple:     {name:'Яблоня',    product:'Яблоки',    seedName:'Саженец яблони',    seed:150, sell:35,  grow:10, regrow:3, yield:3, tree:true, color:'#cf2f2f'}
+};
+const KEYS = Object.keys(CROPS);
+const TOOLS = [{id:'hoe', name:'Мотыга'}, {id:'can', name:'Лейка'}, ...KEYS.map(k => ({id:'seed', k, name:CROPS[k].seedName}))];
+const UPGRADES = [
+  {id:'can',   name:'Большая лейка',     sub:'Вмещает 30 л вместо 10',            cost:250},
+  {id:'field', name:'Расчистить участок', sub:'Ещё 30 грядок справа на огороде',   cost:400},
+  {id:'house', name:'Отремонтировать дом', sub:'Главная цель: вернуть дому жизнь', cost:GOAL}
+];
+const GREET = [
+  'Здравствуй, Тёма! Что сегодня принёс?',
+  'О, внук Матвея пожаловал! Дед бы тобой гордился.',
+  'Свежие овощи у меня с руками отрывают. Показывай!',
+  'Семена свежие, только утром привезли.'
+];
+const DIRS = {up:[0,-1], down:[0,1], left:[-1,0], right:[1,0]};
+const WALK = '.,=fF', INTERACT = 'fFDWM~H';
+
+function hash(a, b, c = 0) {
+  let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(c | 0, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ---------- state ---------- */
+function newState() {
+  const seeds = {}, produce = {};
+  KEYS.forEach(k => { seeds[k] = 0; produce[k] = 0; });
+  seeds.carrot = 6; seeds.potato = 3;
+  return {v:1, day:1, min:360, money:100, water:10, cap:10, expanded:false, house:false,
+          plots:{}, seeds, produce, tool:0, px:4, py:5, face:'down', intro:false, lateWarned:false};
+}
+function merge(s) {
+  const b = newState();
+  if (!s || typeof s !== 'object') return b;
+  const o = {...b, ...s};
+  o.seeds = {...b.seeds, ...(s.seeds || {})};
+  o.produce = {...b.produce, ...(s.produce || {})};
+  o.plots = s.plots && typeof s.plots === 'object' ? s.plots : {};
+  return o;
+}
+let state, player, map = [], bg = null, bgDirty = true, panelOpen = false, panelHandler = null, panelClosable = true;
+let particles = [], soundOn = true, ac = null, toastTimer = 0;
+const held = [];
+
+function snap() { return {...state, px: player ? player.x : state.px, py: player ? player.y : state.py, face: player ? player.face : state.face}; }
+function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(snap())); } catch (e) {} }
+function load() { try { const s = localStorage.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+
+/* ---------- map ---------- */
+function buildMap() {
+  map = Array.from({length:H}, () => Array(W).fill('.'));
+  const set = (x, y, c) => { if (x >= 0 && y >= 0 && x < W && y < H) map[y][x] = c; };
+  const rect = (x0, y0, x1, y1, c) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(x, y, c); };
+  for (let x = 0; x < W; x++) { set(x, 0, 'T'); set(x, H - 1, 'T'); }
+  for (let y = 0; y < H; y++) { set(0, y, 'T'); set(W - 1, y, 'T'); }
+  rect(2, 1, 5, 3, 'H'); set(4, 3, 'D');
+  set(9, 2, 'W');
+  rect(4, 4, 4, 13, '='); rect(4, 8, 7, 8, '='); rect(4, 13, 22, 13, '='); rect(22, 9, 22, 13, '=');
+  for (let x = 7; x <= 18; x++) { set(x, 5, '#'); set(x, 12, '#'); }
+  for (let y = 5; y <= 12; y++) { set(7, y, '#'); set(18, y, '#'); }
+  set(7, 8, '='); set(12, 12, '=');
+  rect(8, 6, 17, 11, 'F'); rect(8, 6, 12, 11, 'f');
+  if (state.expanded) rect(13, 6, 17, 11, 'f');
+  rect(20, 6, 24, 8, 'M');
+  rect(1, 14, 5, 16, '~');
+  [[20,2],[24,2],[25,3],[14,2],[26,9],[25,11],[26,14],[24,15],[17,15],[10,15],[13,16],[7,15],[20,16]].forEach(([x, y]) => set(x, y, 'T'));
+  [[16,2],[6,10],[20,11],[8,14]].forEach(([x, y]) => set(x, y, 'B'));
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++)
+    if (map[y][x] === '.' && hash(x, y, 7) < 0.09) map[y][x] = ',';
+}
+const inMap = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
+const walkable = (x, y) => inMap(x, y) && WALK.includes(map[y][x]);
+
+/* ---------- pixel drawing ---------- */
+const painter = (g, X, Y) => (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(X + x, Y + y, w, h); };
+
+function drawGrass(g, x, y, base = C.grass) {
+  const P = painter(g, x * T, y * T);
+  P(0, 0, 16, 16, base);
+  for (let i = 0; i < 6; i++) P(Math.floor(hash(x, y, i) * 15), Math.floor(hash(x, y, i + 20) * 14), 1, 2, i % 2 ? C.grassD : C.grassL);
+}
+function drawPath(g, x, y) {
+  const P = painter(g, x * T, y * T);
+  P(0, 0, 16, 16, C.path);
+  for (let i = 0; i < 5; i++) P(Math.floor(hash(x, y, i + 3) * 14), Math.floor(hash(x, y, i + 30) * 14), 2, 1, i % 2 ? C.pathD : C.pathL);
+}
+function drawFlowers(g, x, y) {
+  drawGrass(g, x, y);
+  const P = painter(g, x * T, y * T), cols = ['#f4f1e8', '#f5d33b', '#e88bb5'];
+  for (let i = 0; i < 2; i++) {
+    const fx = 2 + Math.floor(hash(x, y, i + 40) * 11), fy = 2 + Math.floor(hash(x, y, i + 50) * 11);
+    P(fx, fy, 3, 3, cols[Math.floor(hash(x, y, i + 60) * 3)]); P(fx + 1, fy + 1, 1, 1, '#c8922a');
+  }
+}
+function drawLocked(g, x, y) {
+  drawGrass(g, x, y, C.farm);
+  const P = painter(g, x * T, y * T), r = hash(x, y, 9);
+  if (r < 0.35) { P(4, 6, 7, 5, C.stone); P(4, 6, 7, 1, C.stoneL); P(5, 10, 6, 1, C.stoneD); }
+  else if (r < 0.7) { P(3, 4, 1, 6, C.leafD); P(5, 2, 1, 8, C.leafD); P(7, 5, 1, 5, C.leafD); P(10, 7, 1, 5, C.leafD); P(12, 5, 1, 6, C.leafD); }
+  else { P(5, 8, 6, 5, C.trunk); P(5, 8, 6, 2, '#a0784f'); P(7, 8, 2, 1, C.trunkD); }
+}
+function drawFence(g, x, y) {
+  drawGrass(g, x, y);
+  const P = painter(g, x * T, y * T), is = (a, b) => inMap(a, b) && map[b][a] === '#';
+  if (is(x - 1, y)) { P(0, 6, 8, 2, C.fence); P(0, 10, 8, 2, C.fence); }
+  if (is(x + 1, y)) { P(8, 6, 8, 2, C.fence); P(8, 10, 8, 2, C.fence); }
+  if (is(x, y - 1)) P(7, 0, 2, 6, C.fence);
+  if (is(x, y + 1)) P(7, 12, 2, 4, C.fence);
+  P(5, 3, 6, 11, C.fence); P(5, 3, 6, 1, C.fenceL); P(5, 13, 6, 1, C.fenceD); P(10, 4, 1, 9, C.fenceD);
+}
+function drawTree(g, x, y) {
+  drawGrass(g, x, y);
+  const P = painter(g, x * T, y * T);
+  P(3, 13, 10, 2, 'rgba(0,0,0,.18)');
+  P(6, 10, 4, 6, C.trunk); P(6, 10, 1, 6, C.trunkD);
+  P(2, 2, 12, 9, C.leaf); P(1, 4, 14, 5, C.leaf); P(4, 1, 8, 1, C.leaf);
+  P(4, 3, 4, 2, C.leafL); P(3, 5, 2, 2, C.leafL); P(2, 9, 12, 2, C.leafD);
+}
+function drawBush(g, x, y) {
+  drawGrass(g, x, y);
+  const P = painter(g, x * T, y * T);
+  P(2, 6, 12, 8, C.leaf); P(3, 5, 10, 2, C.leafL); P(1, 8, 14, 4, C.leaf); P(3, 12, 10, 2, C.leafD);
+  P(5, 8, 1, 1, '#d63b45'); P(10, 9, 1, 1, '#d63b45'); P(7, 11, 1, 1, '#d63b45');
+}
+function drawWell(g, x, y) {
+  drawGrass(g, x, y);
+  const P = painter(g, x * T, y * T);
+  P(2, 8, 12, 7, C.stone); P(2, 8, 12, 1, C.stoneL); P(4, 12, 2, 1, C.stoneD); P(9, 13, 3, 1, C.stoneD); P(7, 11, 2, 1, C.stoneD);
+  P(4, 9, 8, 2, '#2a4f78');
+  P(3, 2, 2, 7, C.trunk); P(11, 2, 2, 7, C.trunk);
+  P(1, 1, 14, 2, '#7a4a26'); P(2, 0, 12, 1, '#9a6a3a');
+  P(7, 3, 1, 4, '#d9c9a0'); P(6, 7, 3, 2, '#8b8b8b');
+}
+function drawHouse(g, repaired) {
+  const P = painter(g, 2 * T, 1 * T);
+  const roof = repaired ? '#a8432f' : '#7a5a4a', roofD = repaired ? '#7e2f20' : '#5b4236';
+  const wall = repaired ? '#c8945a' : '#9b7a58', wallD = repaired ? '#9e6e3c' : '#76593e';
+  P(2, 20, 60, 28, wall);
+  for (let x = 2; x < 62; x += 6) P(x, 20, 1, 28, wallD);
+  P(2, 46, 60, 2, wallD);
+  for (let r = 0; r < 20; r++) { const i = Math.floor((19 - r) / 3); P(i, r, 64 - 2 * i, 1, r % 4 === 3 ? roofD : roof); }
+  P(6, 0, 52, 2, roofD);
+  P(46, 1, 6, 9, '#7d7d74'); P(46, 1, 6, 1, '#9d9d92');
+  const win = wx => {
+    P(wx, 25, 12, 10, '#3b2a1f'); P(wx + 1, 26, 10, 8, repaired ? '#9fd3f0' : '#2f3b44');
+    P(wx + 6, 26, 1, 8, '#3b2a1f'); P(wx + 1, 30, 10, 1, '#3b2a1f');
+    if (repaired) { P(wx + 2, 27, 2, 2, '#d8f0fb'); P(wx - 1, 35, 14, 3, '#7e2f20'); P(wx, 34, 2, 1, '#e75480'); P(wx + 5, 34, 2, 1, '#f5d33b'); P(wx + 9, 34, 2, 1, '#e75480'); }
+    else { P(wx - 1, 27, 14, 2, '#8a6a48'); P(wx - 1, 31, 14, 2, '#8a6a48'); }
+  };
+  win(8); win(44);
+  P(35, 29, 10, 19, '#3b2a1f'); P(36, 30, 8, 18, repaired ? '#7a4a26' : '#5a3d26'); P(42, 39, 1, 1, C.coin || '#f0bf45');
+  P(33, 46, 14, 2, '#8d8d84');
+  if (!repaired) { P(14, 10, 5, 2, C.ink); P(40, 14, 5, 2, C.ink); P(22, 38, 3, 6, '#3b2a1f'); P(56, 24, 2, 8, '#3b2a1f'); }
+}
+function drawMarket(g) {
+  const P = painter(g, 20 * T, 6 * T);
+  P(2, 12, 76, 22, '#8b6a45');
+  for (let x = 2; x < 78; x += 8) P(x, 12, 1, 22, '#6f5235');
+  P(2, 10, 4, 38, C.fenceD); P(74, 10, 4, 38, C.fenceD);
+  for (let i = 0; i < 10; i++) {
+    const c = i % 2 ? '#f2e6bf' : '#c7432f';
+    P(i * 8, 0, 8, 10, c); P(i * 8 + 1, 10, 6, 2, c); P(i * 8 + 2, 12, 4, 1, c);
+  }
+  P(0, 0, 80, 1, '#7e2a1d');
+  const skin = '#f0c29a';
+  P(34, 24, 12, 8, '#5b8fd6'); P(37, 25, 6, 7, '#f2e6bf');
+  P(36, 16, 8, 8, skin); P(38, 19, 1, 1, C.ink); P(41, 19, 1, 1, C.ink); P(37, 21, 1, 1, '#e8907a'); P(42, 21, 1, 1, '#e8907a');
+  P(35, 14, 10, 3, '#d6455a'); P(34, 16, 2, 4, '#d6455a'); P(44, 16, 2, 4, '#d6455a');
+  P(0, 30, 80, 18, C.fence); P(0, 30, 80, 3, C.fenceL); P(0, 39, 80, 1, C.fenceD); P(0, 46, 80, 2, C.fenceD);
+  P(6, 25, 18, 7, '#7a5230'); P(56, 25, 18, 7, '#7a5230');
+  for (let i = 0; i < 5; i++) { P(8 + i * 3, 24, 2, 2, '#e8832a'); P(58 + i * 3, 24, 2, 2, i % 2 ? '#cf2f2f' : '#d63b45'); }
+  P(28, 36, 24, 8, '#f2e6bf'); P(36, 38, 4, 4, '#f0bf45'); P(41, 38, 4, 4, '#f0bf45'); P(37, 39, 2, 2, '#c8922a'); P(42, 39, 2, 2, '#c8922a');
+}
+
+function buildBg() {
+  const c = document.createElement('canvas'); c.width = W * T; c.height = H * T;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const ch = map[y][x];
+    if (ch === '=') drawPath(g, x, y);
+    else if (ch === ',') drawFlowers(g, x, y);
+    else if (ch === '#') drawFence(g, x, y);
+    else if (ch === 'T') drawTree(g, x, y);
+    else if (ch === 'B') drawBush(g, x, y);
+    else if (ch === 'W') drawWell(g, x, y);
+    else if (ch === 'F') drawLocked(g, x, y);
+    else if (ch === 'f') drawGrass(g, x, y, C.farm);
+    else if (ch === '~') { g.fillStyle = C.water; g.fillRect(x * T, y * T, T, T); }
+    else drawGrass(g, x, y);
+  }
+  drawHouse(g, state.house);
+  drawMarket(g);
+  return c;
+}
+
+/* crops in the field */
+function cropStage(c) {
+  const d = CROPS[c.k];
+  if (c.ripe) return 3;
+  if (d.tree && c.grown) return 2;
+  const p = c.age / d.grow;
+  return p < 0.3 ? 0 : p < 0.6 ? 1 : 2;
+}
+function drawCrop(g, X, Y, k, st) {
+  const P = painter(g, X, Y), d = CROPS[k];
+  if (k === 'apple') {
+    if (st === 0) { P(7, 7, 2, 8, C.trunk); P(5, 6, 3, 2, C.leafL); P(9, 5, 3, 2, C.leafL); return; }
+    if (st === 1) { P(7, 8, 2, 7, C.trunk); P(4, 1, 8, 8, C.leaf); P(5, 2, 3, 2, C.leafL); P(4, 7, 8, 2, C.leafD); return; }
+    P(3, 13, 10, 2, 'rgba(0,0,0,.2)');
+    P(6, 8, 4, 8, C.trunk); P(6, 8, 1, 8, C.trunkD);
+    P(1, -6, 14, 14, C.leaf); P(0, -3, 16, 8, C.leaf); P(3, -8, 10, 2, C.leaf);
+    P(3, -5, 4, 3, C.leafL); P(1, 5, 14, 3, C.leafD);
+    if (st === 3) [[3, -2], [9, -5], [11, 1], [5, 3], [7, -1]].forEach(([a, b]) => { P(a, b, 3, 3, d.color); P(a, b, 1, 1, '#f07070'); });
+    return;
+  }
+  if (st === 0) { P(4, 9, 2, 2, '#4a2c16'); P(9, 8, 2, 2, '#4a2c16'); P(7, 11, 2, 1, '#4a2c16'); return; }
+  if (st === 1) { P(7, 8, 2, 5, C.leaf); P(5, 7, 2, 2, C.leafL); P(9, 7, 2, 2, C.leafL); return; }
+  if (st === 2) {
+    if (k === 'pumpkin') { P(1, 10, 14, 2, C.leaf); P(2, 7, 4, 3, C.leafL); P(10, 7, 4, 3, C.leafL); P(7, 9, 2, 2, '#f5c84a'); return; }
+    if (k === 'tomato') P(7, 2, 2, 12, '#a07a4a');
+    P(7, 6, 2, 7, C.leaf); P(4, 5, 3, 3, C.leafL); P(9, 4, 3, 3, C.leafL); P(4, 9, 3, 2, C.leaf); P(9, 8, 3, 2, C.leaf);
+    return;
+  }
+  if (k === 'carrot') {
+    P(5, 2, 2, 6, C.leaf); P(8, 1, 2, 7, C.leafL); P(10, 3, 2, 5, C.leaf);
+    P(5, 8, 6, 4, d.color); P(6, 12, 4, 2, '#d06a1c'); P(7, 14, 2, 1, '#d06a1c');
+  } else if (k === 'potato') {
+    P(3, 5, 10, 7, C.leaf); P(4, 4, 8, 2, C.leafL); P(5, 3, 2, 2, '#c9a6e8'); P(10, 5, 2, 2, '#f3f0ff');
+    P(2, 12, 4, 3, d.color); P(10, 12, 4, 3, d.color); P(6, 13, 3, 2, '#a87f4c');
+  } else if (k === 'strawberry') {
+    P(2, 8, 12, 5, C.leaf); P(3, 7, 4, 2, C.leafL); P(9, 7, 4, 2, C.leafL);
+    [[3, 11], [9, 10], [6, 12]].forEach(([a, b]) => { P(a, b, 3, 3, d.color); P(a + 1, b + 1, 1, 1, '#f5d33b'); });
+  } else if (k === 'tomato') {
+    P(7, 1, 2, 14, '#a07a4a'); P(4, 3, 8, 9, C.leaf); P(3, 6, 10, 4, C.leafL);
+    [[4, 5], [9, 7], [5, 10]].forEach(([a, b]) => { P(a, b, 3, 3, d.color); P(a, b, 1, 1, '#ff8a70'); });
+  } else if (k === 'pumpkin') {
+    P(1, 12, 14, 2, C.leaf); P(1, 6, 4, 3, C.leafL);
+    P(3, 6, 10, 8, d.color); P(2, 8, 12, 5, d.color);
+    P(5, 7, 1, 6, '#c46d10'); P(8, 6, 1, 8, '#c46d10'); P(11, 7, 1, 6, '#c46d10'); P(7, 4, 2, 3, '#5a7a2a');
+  }
+}
+
+/* icons */
+function drawProduce(g, k, ox = 2, oy = 2) {
+  const P = painter(g, ox, oy), c = CROPS[k].color;
+  if (k === 'carrot') { P(8, 0, 2, 3, C.leafL); P(10, 1, 2, 2, C.leaf); P(6, 3, 4, 3, c); P(4, 5, 4, 3, c); P(3, 7, 3, 2, c); P(2, 9, 2, 2, c); P(1, 11, 1, 1, c); P(7, 3, 1, 1, '#f6a85a'); }
+  else if (k === 'potato') { P(2, 3, 9, 7, c); P(1, 4, 11, 5, c); P(3, 2, 6, 1, c); P(2, 8, 9, 2, '#a87f4c'); P(4, 5, 1, 1, '#8a6438'); P(8, 6, 1, 1, '#8a6438'); P(6, 3, 1, 1, '#8a6438'); }
+  else if (k === 'strawberry') { P(4, 0, 5, 2, C.leafL); P(2, 2, 9, 4, c); P(3, 6, 7, 3, c); P(5, 9, 3, 2, c); P(4, 3, 1, 1, '#f5d33b'); P(8, 4, 1, 1, '#f5d33b'); P(6, 6, 1, 1, '#f5d33b'); }
+  else if (k === 'tomato') { P(2, 3, 9, 8, c); P(1, 5, 11, 4, c); P(3, 2, 7, 1, c); P(5, 1, 3, 2, C.leaf); P(3, 4, 2, 2, '#ff8a70'); }
+  else if (k === 'pumpkin') { P(1, 4, 11, 7, c); P(2, 3, 9, 9, c); P(4, 4, 1, 7, '#c46d10'); P(8, 4, 1, 7, '#c46d10'); P(5, 1, 2, 3, '#5a7a2a'); }
+  else if (k === 'apple') { P(2, 3, 9, 8, c); P(1, 5, 11, 5, c); P(3, 11, 7, 1, c); P(6, 0, 1, 3, C.trunk); P(7, 1, 3, 2, C.leafL); P(3, 5, 2, 2, '#f07070'); }
+}
+function iconCanvas(kind, k) {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const g = c.getContext('2d'), P = painter(g, 0, 0);
+  if (kind === 'hoe') {
+    for (let i = 0; i < 10; i++) P(2 + i, 13 - i, 2, 2, C.trunk);
+    P(9, 1, 6, 3, '#9aa3ad'); P(12, 4, 3, 3, '#9aa3ad'); P(9, 1, 6, 1, '#c9d0d6');
+  } else if (kind === 'can') {
+    P(3, 6, 9, 8, '#7d9bb5'); P(3, 6, 9, 2, '#a9c2d6'); P(12, 8, 2, 2, '#7d9bb5'); P(14, 6, 2, 3, '#7d9bb5');
+    P(5, 3, 5, 1, '#5e7a92'); P(4, 3, 1, 3, '#5e7a92'); P(10, 3, 1, 3, '#5e7a92');
+  } else if (kind === 'seed') {
+    P(2, 1, 12, 14, '#efe0b4'); P(2, 1, 12, 2, CROPS[k].color); P(2, 14, 12, 1, '#c9b48a');
+    drawProduce(g, k, 3, 3);
+  } else if (kind === 'prod') drawProduce(g, k);
+  else if (kind === 'field') {
+    P(1, 6, 14, 9, C.soil); P(2, 8, 12, 1, C.soilD); P(2, 11, 12, 1, C.soilD); P(7, 2, 2, 5, C.leaf); P(5, 2, 2, 2, C.leafL); P(9, 1, 2, 2, C.leafL);
+  } else if (kind === 'house') {
+    for (let r = 0; r < 6; r++) P(7 - r, 2 + r, 2 + r * 2, 1, '#a8432f');
+    P(3, 8, 10, 7, '#c8945a'); P(7, 11, 3, 4, '#7a4a26'); P(4, 10, 2, 2, '#9fd3f0');
+  }
+  return c;
+}
+
+/* player */
+function drawPlayer(g, X, Y, face, frame) {
+  const P = painter(g, X, Y - (frame ? 1 : 0));
+  const skin = '#f2c39b', hat = '#e3c069', band = '#9c6b2f', shirt = '#c0563a', over = '#3d5a8c', boot = '#4a2f1d', hair = '#7a4a22';
+  g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(X + 4, Y + 14, 8, 2);
+  const l = frame ? 1 : 0;
+  P(5, 13 - l, 2, 3, boot); P(9, 13 - (frame ? 0 : 1) + (frame ? 0 : 1), 2, 3, boot);
+  P(4, 9, 8, 4, shirt); P(5, 10, 6, 4, over); P(6, 9, 1, 1, over); P(9, 9, 1, 1, over);
+  if (face === 'left') { P(5, 10, 2, 3, skin); }
+  else if (face === 'right') { P(9, 10, 2, 3, skin); }
+  else { P(3, 10, 1, 3, skin); P(12, 10, 1, 3, skin); }
+  P(4, 4, 8, 5, skin);
+  if (face === 'up') P(4, 4, 8, 4, hair);
+  else if (face === 'down') { P(6, 6, 1, 2, C.ink); P(9, 6, 1, 2, C.ink); P(4, 4, 8, 1, hair); }
+  else if (face === 'left') { P(5, 6, 1, 2, C.ink); P(8, 4, 4, 3, hair); }
+  else { P(10, 6, 1, 2, C.ink); P(4, 4, 4, 3, hair); }
+  P(2, 3, 12, 2, hat); P(4, 1, 8, 2, hat); P(4, 3, 8, 1, band);
+}
+
+/* ---------- game logic ---------- */
+function makePlayer() {
+  let x = state.px, y = state.py;
+  if (!walkable(x, y)) { x = 4; y = 5; }
+  return {x, y, tx:x, ty:y, t:0, moving:false, face:state.face || 'down', path:[], pending:null, walk:0};
+}
+function dirTo(x, y, nx, ny) {
+  if (nx > x) return 'right'; if (nx < x) return 'left'; if (ny > y) return 'down'; if (ny < y) return 'up'; return null;
+}
+function step(d) {
+  const p = player; p.face = d;
+  const [dx, dy] = DIRS[d], nx = p.x + dx, ny = p.y + dy;
+  if (!walkable(nx, ny)) return false;
+  p.tx = nx; p.ty = ny; p.moving = true; p.t = 0; return true;
+}
+function front() { const [dx, dy] = DIRS[player.face]; return [player.x + dx, player.y + dy]; }
+
+function update(dt) {
+  particles = particles.filter(q => (q.life -= dt) > 0);
+  particles.forEach(q => { q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 140 * dt; });
+  if (panelOpen) return;
+  state.min += dt * 4;
+  if (state.min >= 1380 && !state.lateWarned) { state.lateWarned = true; toast('Уже 23:00. Пора домой — дверь дома в левом верхнем углу.'); }
+  if (state.min >= 1440) { newDay('Тёма так заработался, что уснул прямо на улице. Соседи проводили его до дома.'); return; }
+  const p = player;
+  if (p.moving) { p.t += dt / 0.15; p.walk += dt; if (p.t >= 1) { p.x = p.tx; p.y = p.ty; p.moving = false; p.t = 0; } }
+  if (!p.moving) {
+    const d = held[held.length - 1];
+    if (d) { p.path = []; p.pending = null; step(d); }
+    else if (p.path.length) { const [nx, ny] = p.path.shift(); if (!step(dirTo(p.x, p.y, nx, ny))) { p.path = []; p.pending = null; } }
+    else if (p.pending) { const {x, y} = p.pending; p.pending = null; p.face = dirTo(p.x, p.y, x, y) || p.face; act(x, y); }
+  }
+}
+
+function puff(tx, ty, color, n = 6) {
+  for (let i = 0; i < n; i++) particles.push({x:tx * T + 8, y:ty * T + 9, vx:(Math.random() - .5) * 50, vy:-Math.random() * 50 - 10, life:.5, c:color});
+}
+
+function act(tx, ty) {
+  ensureAudio();
+  if (!inMap(tx, ty)) return;
+  const c = map[ty][tx];
+  if (c === 'D') return openSleep();
+  if (c === 'M') return openShop('sell');
+  if (c === 'W' || c === '~') {
+    if (state.water >= state.cap) return toast('Лейка уже полная.');
+    state.water = state.cap; SFX.water(); puff(tx, ty, C.waterL, 8);
+    return toast('Лейка наполнена: ' + state.cap + ' л.');
+  }
+  if (c === 'F') { SFX.nope(); return toast('Тут всё заросло. Расчистить участок можно на рынке.'); }
+  if (c === 'H') return toast(state.house ? 'Дедушкин дом. Теперь в нём тепло и уютно.' : 'Дедушкин дом. Крыша течёт, доски скрипят. Нужен ремонт.');
+  const tool = TOOLS[state.tool];
+  if (c !== 'f') {
+    if (tool.id !== 'can') { SFX.nope(); toast('Копать и сажать можно только на огороде за забором.'); }
+    return;
+  }
+  const key = tx + ',' + ty, pl = state.plots[key];
+  if (pl && pl.c && pl.c.ripe) return harvest(tx, ty, pl);
+  if (tool.id === 'hoe') {
+    if (!pl || !pl.t) { state.plots[key] = {t:1, w:0, c:null}; SFX.till(); puff(tx, ty, C.soil); }
+    else if (pl.c) toast('Тут растёт: ' + CROPS[pl.c.k].name.toLowerCase() + '.');
+    else toast('Земля уже вскопана. Выберите семена.');
+    return;
+  }
+  if (tool.id === 'can') {
+    if (!pl || !pl.t) { SFX.nope(); return toast('Сначала вскопайте землю мотыгой.'); }
+    if (pl.w) return toast('Здесь уже полито.');
+    if (state.water <= 0) { SFX.nope(); return toast('Лейка пуста. Наберите воды в колодце или пруду.'); }
+    state.water--; pl.w = 1; SFX.water(); puff(tx, ty, C.waterL);
+    return;
+  }
+  const k = tool.k, d = CROPS[k];
+  if (!pl || !pl.t) { SFX.nope(); return toast('Сначала вскопайте землю мотыгой.'); }
+  if (pl.c) return toast('Тут уже растёт: ' + CROPS[pl.c.k].name.toLowerCase() + '.');
+  if (state.seeds[k] <= 0) { SFX.nope(); return toast('Закончилось: ' + d.seedName.toLowerCase() + '. Купите на рынке.'); }
+  state.seeds[k]--; pl.c = {k, age:0, ripe:false, grown:false}; SFX.plant(); puff(tx, ty, '#4a2c16', 4);
+}
+
+function harvest(tx, ty, pl) {
+  const d = CROPS[pl.c.k], n = d.yield || 1;
+  state.produce[pl.c.k] += n;
+  if (d.regrow) { pl.c.ripe = false; pl.c.age = d.grow - d.regrow; if (d.tree) pl.c.grown = true; }
+  else pl.c = null;
+  SFX.harvest(); puff(tx, ty, d.color, 10);
+  toast('+' + n + ' ' + d.product.toLowerCase());
+}
+
+function factor(k, day = state.day) { return 0.8 + 0.45 * hash(day, KEYS.indexOf(k) + 1, 99); }
+function price(k) { return Math.max(1, Math.round(CROPS[k].sell * factor(k))); }
+
+function newDay(note) {
+  const ripened = {}; let dry = 0;
+  for (const key in state.plots) {
+    const pl = state.plots[key];
+    if (pl.c && !pl.c.ripe) {
+      const d = CROPS[pl.c.k];
+      if (!pl.w) dry++;
+      pl.c.age += pl.w ? 1 : 0.5;
+      if (pl.c.age >= d.grow) { pl.c.age = d.grow; pl.c.ripe = true; if (d.tree) pl.c.grown = true; ripened[pl.c.k] = (ripened[pl.c.k] || 0) + 1; }
+    }
+    pl.w = 0;
+  }
+  state.day++; state.min = 360; state.lateWarned = false;
+  state.px = 4; state.py = 4; state.face = 'down';
+  player = makePlayer(); held.length = 0;
+  save();
+  openMorning(note, ripened, dry);
+}
+
+/* ---------- panels ---------- */
+const overlay = $('#overlay'), panel = $('#panel');
+function openPanel(html, handler, closable = true) {
+  panel.innerHTML = html;
+  panel.querySelectorAll('[data-icon]').forEach(el => { const [kind, k] = el.dataset.icon.split(':'); el.replaceWith(iconCanvas(kind, k)); });
+  overlay.hidden = false; panelOpen = true; panelHandler = handler; panelClosable = closable; held.length = 0;
+  if (player) { player.path = []; player.pending = null; }
+  const f = panel.querySelector('[data-focus]') || panel.querySelector('button:not([disabled])');
+  if (f) f.focus({preventScroll:true});
+}
+function closePanel() { overlay.hidden = true; panelOpen = false; panelHandler = null; }
+panel.addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || b.disabled) return;
+  ensureAudio();
+  if (b.hasAttribute('data-close')) { closePanel(); return; }
+  if (panelHandler) panelHandler(b);
+});
+overlay.addEventListener('click', e => { if (e.target === overlay && panelClosable) closePanel(); });
+
+const HOW = `
+  <h3>Как играть</h3>
+  <ol>
+    <li>Мотыгой вскопайте землю за забором.</li>
+    <li>Выберите семена и посадите их на вскопанную грядку.</li>
+    <li>Полейте грядку из лейки. Воду набирают в колодце или пруду.</li>
+    <li>Ночью растения подрастают. Без полива — вдвое медленнее.</li>
+    <li>Спелый урожай соберите и продайте тёте Гале на рынке справа.</li>
+    <li>Чтобы лечь спать и начать новый день, подойдите к двери дома.</li>
+  </ol>
+  <h3>Управление</h3>
+  <p class="small"><b>Клавиатура:</b> стрелки или WASD — ходить, Пробел или E — действие, 1–8 — выбрать предмет.<br>
+  <b>Мышь и телефон:</b> нажмите на клетку — Тёма сам дойдёт и сделает действие выбранным предметом. Для точного управления на телефоне есть крестовина.</p>`;
+
+function openIntro() {
+  openPanel(`<h2>Дедушкин огород</h2>
+    <p>Дедушка Матвей оставил внуку Тёме старый дом и заросший огород на краю деревни. В кармане 100 монет и пара пакетиков семян.</p>
+    <p>План простой: вырастить урожай, продать его тёте Гале на рынке и накопить ${GOAL} монет на ремонт дома.</p>
+    ${HOW}
+    <div class="btns"><button class="btn" data-close data-focus>Начать</button></div>`, null, true);
+  state.intro = true; save();
+}
+function openHelp() {
+  openPanel(`<h2>Справка</h2><p>День ${state.day}. Цель: ${state.house ? 'выполнена, дом отремонтирован' : 'накопить ' + GOAL + ' монет и отремонтировать дом'}.</p>
+    ${HOW}
+    <div class="btns"><button class="btn" data-close data-focus>Играть</button><button class="btn alt" data-act="reset">Начать заново</button></div>`, b => {
+    if (b.dataset.act === 'reset') openPanel(`<h2>Начать заново?</h2><p>Весь прогресс сотрётся: деньги, грядки и покупки.</p>
+      <div class="btns"><button class="btn warn" data-act="yes">Да, начать заново</button><button class="btn alt" data-close data-focus>Нет</button></div>`, b2 => {
+      if (b2.dataset.act === 'yes') {
+        state = newState(); buildMap(); player = makePlayer(); bgDirty = true; particles = []; save(); openIntro();
+      }
+    });
+  });
+}
+function openSleep() {
+  const t = clockText();
+  openPanel(`<h2>Лечь спать?</h2><p>Сейчас ${t}. Наступит утро следующего дня, а растения за ночь подрастут.</p>
+    <div class="btns"><button class="btn" data-act="sleep" data-focus>Спать</button><button class="btn alt" data-close>Ещё побуду</button></div>`, b => {
+    if (b.dataset.act === 'sleep') { SFX.plant(); newDay(''); }
+  });
+}
+function openMorning(note, ripened, dry) {
+  const list = Object.keys(ripened).map(k => CROPS[k].product + ' ×' + ripened[k]).join(', ');
+  let best = KEYS[0]; KEYS.forEach(k => { if (factor(k) > factor(best)) best = k; });
+  openPanel(`<h2>День ${state.day}. Утро</h2>
+    ${note ? `<p>${note}</p>` : ''}
+    <p>${list ? 'За ночь созрело: ' + list + '.' : 'Пока ничего не созрело. Растения тянутся к солнцу.'}</p>
+    ${dry ? `<p>Без полива осталось грядок: ${dry}. Они росли вдвое медленнее.</p>` : ''}
+    <p class="say">Тётя Галя кричит с рынка: «Сегодня хорошо берут: ${CROPS[best].product.toLowerCase()}, по ${price(best)} монет!»</p>
+    <div class="btns"><button class="btn" data-close data-focus>Доброе утро!</button></div>`);
+}
+function openWin() {
+  openPanel(`<h2>Дом отремонтирован!</h2>
+    <p>Крыша больше не течёт, в окнах новые стёкла, на подоконниках цветы. Дедушка Матвей был бы рад.</p>
+    <p>Вы справились за ${state.day} ${plural(state.day, 'день', 'дня', 'дней')}. Огород ваш: можно играть дальше, растить яблони и копить монеты.</p>
+    <div class="btns"><button class="btn" data-close data-focus>Продолжить</button></div>`);
+}
+function plural(n, a, b, c) { const m = n % 100, d = n % 10; if (m > 10 && m < 20) return c; if (d === 1) return a; if (d > 1 && d < 5) return b; return c; }
+
+let shopTab = 'sell';
+function openShop(tab) {
+  shopTab = tab || shopTab;
+  const greet = GREET[Math.floor(hash(state.day, 3, 5) * GREET.length)];
+  const tabs = `<div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="sell" aria-selected="${shopTab === 'sell'}">Продать</button>
+      <button class="tab" role="tab" data-tab="buy" aria-selected="${shopTab === 'buy'}">Купить</button></div>`;
+  let body = '';
+  if (shopTab === 'sell') {
+    let total = 0;
+    KEYS.forEach(k => {
+      const n = state.produce[k]; if (!n) return;
+      const p = price(k), f = factor(k); total += n * p;
+      const trend = f > 1.08 ? '<span class="up">▲ сегодня дорого</span>' : f < 0.92 ? '<span class="down">▼ сегодня дёшево</span>' : 'обычная цена';
+      body += `<div class="row"><span data-icon="prod:${k}"></span><div><div class="nm">${CROPS[k].product} ×${n}</div><div class="sub">${p} мон. за шт. · ${trend}</div></div>
+        <div class="acts"><button class="btn alt sm" data-sell="${k}:1">Продать 1</button><button class="btn sm" data-sell="${k}:all">Все за ${n * p}</button></div></div>`;
+    });
+    body = body
+      ? body + `<div class="btns"><button class="btn" data-sell="all:all" data-focus>Продать всё за ${total}</button><button class="btn alt" data-close>Уйти</button></div>`
+      : `<p>Корзина пуста. Соберите урожай и приходите.</p><div class="btns"><button class="btn" data-tab="buy" data-focus>Купить семена</button><button class="btn alt" data-close>Уйти</button></div>`;
+  } else {
+    body += '<h3>Семена и саженцы</h3>';
+    KEYS.forEach(k => {
+      const d = CROPS[k];
+      const info = `${d.seed} мон. · растёт ${d.grow} ${plural(d.grow, 'день', 'дня', 'дней')}` + (d.regrow ? ` · потом урожай каждые ${d.regrow} дн.` : '') + ` · у вас ${state.seeds[k]}`;
+      body += `<div class="row"><span data-icon="seed:${k}"></span><div><div class="nm">${d.seedName}</div><div class="sub">${info}</div></div>
+        <div class="acts"><button class="btn alt sm" data-buy="${k}:1" ${state.money < d.seed ? 'disabled' : ''}>+1</button><button class="btn sm" data-buy="${k}:5" ${state.money < d.seed * 5 ? 'disabled' : ''}>+5 за ${d.seed * 5}</button></div></div>`;
+    });
+    body += '<h3>Улучшения</h3>';
+    UPGRADES.forEach(u => {
+      const done = (u.id === 'can' && state.cap > 10) || (u.id === 'field' && state.expanded) || (u.id === 'house' && state.house);
+      const icon = u.id === 'can' ? 'can' : u.id === 'field' ? 'field' : 'house';
+      body += `<div class="row"><span data-icon="${icon}"></span><div><div class="nm">${u.name}</div><div class="sub">${u.sub}</div></div>
+        <div class="acts"><button class="btn sm" data-up="${u.id}" ${done || state.money < u.cost ? 'disabled' : ''}>${done ? 'Куплено' : u.cost + ' мон.'}</button></div></div>`;
+    });
+    body += `<div class="btns"><button class="btn alt" data-close>Уйти</button></div>`;
+  }
+  openPanel(`<h2>Рынок тёти Гали</h2><p class="say">«${greet}»</p>
+    <div class="money">Монеты: <b>${state.money}</b></div>${tabs}${body}`, shopClick);
+}
+function shopClick(b) {
+  const ds = b.dataset;
+  if (ds.tab) return openShop(ds.tab);
+  if (ds.sell) {
+    const [k, q] = ds.sell.split(':');
+    let got = 0;
+    (k === 'all' ? KEYS : [k]).forEach(key => {
+      const n = q === 'all' ? state.produce[key] : Math.min(1, state.produce[key]);
+      if (n > 0) { got += n * price(key); state.produce[key] -= n; }
+    });
+    if (got) { state.money += got; SFX.coin(); toast('+' + got + ' монет'); }
+  }
+  if (ds.buy) {
+    const [k, q] = ds.buy.split(':'), n = +q, cost = CROPS[k].seed * n;
+    if (state.money >= cost) { state.money -= cost; state.seeds[k] += n; SFX.coin(); }
+  }
+  if (ds.up) {
+    const u = UPGRADES.find(x => x.id === ds.up);
+    if (u && state.money >= u.cost) {
+      state.money -= u.cost; SFX.coin();
+      if (u.id === 'can') { state.cap = 30; state.water = 30; }
+      if (u.id === 'field') { state.expanded = true; buildMap(); bgDirty = true; }
+      if (u.id === 'house') { state.house = true; bgDirty = true; save(); return openWin(); }
+    }
+  }
+  save(); openShop();
+}
+
+/* ---------- sound ---------- */
+function ensureAudio() {
+  if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; } }
+  if (ac && ac.state === 'suspended') ac.resume().catch(() => {});
+}
+function beep(freq, dur = .08, type = 'square', vol = .05, slide = 0) {
+  if (!soundOn || !ac) return;
+  try {
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.linearRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur + .02);
+  } catch (e) {}
+}
+const SFX = {
+  till: () => beep(150, .09, 'square', .05, -60),
+  water: () => beep(700, .14, 'sine', .06, -400),
+  plant: () => beep(440, .07, 'triangle', .07),
+  harvest: () => { beep(660, .07, 'square', .04); setTimeout(() => beep(880, .1, 'square', .04), 70); },
+  coin: () => { beep(988, .05, 'square', .04); setTimeout(() => beep(1319, .12, 'square', .04), 50); },
+  nope: () => beep(110, .12, 'sawtooth', .03)
+};
+
+/* ---------- HUD ---------- */
+const toastEl = $('#toast');
+function toast(msg) {
+  toastEl.textContent = msg; toastEl.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.classList.remove('on'), 2600);
+}
+function clockText() { const m = Math.floor(state.min / 10) * 10; return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'); }
+const setText = (el, v) => { if (el.textContent !== v) el.textContent = v; };
+const els = {day:$('#day'), clock:$('#clock'), part:$('#part'), money:$('#money'), water:$('#water'), basket:$('#basket'), goalTxt:$('#goalTxt'), goalBar:$('#goalBar'), holding:$('#holding')};
+let beltSig = '';
+function hud() {
+  setText(els.day, 'День ' + state.day);
+  setText(els.clock, clockText());
+  setText(els.part, state.min < 720 ? 'утро' : state.min < 1080 ? 'день' : state.min < 1320 ? 'вечер' : 'ночь');
+  setText(els.money, String(state.money));
+  setText(els.water, state.water + '/' + state.cap);
+  setText(els.basket, String(KEYS.reduce((s, k) => s + state.produce[k], 0)));
+  if (state.house) { setText(els.goalTxt, 'Дом отремонтирован'); els.goalBar.style.width = '100%'; }
+  else { setText(els.goalTxt, 'Ремонт дома: ' + Math.min(state.money, GOAL) + '/' + GOAL); els.goalBar.style.width = Math.min(100, state.money / GOAL * 100) + '%'; }
+  const sig = state.tool + '|' + state.water + '|' + state.cap + '|' + KEYS.map(k => state.seeds[k]).join(',');
+  if (sig !== beltSig) { beltSig = sig; updateBelt(); }
+}
+const belt = $('#belt'), slots = [];
+function buildBelt() {
+  belt.innerHTML = ''; slots.length = 0;
+  TOOLS.forEach((t, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'slot'; b.title = t.name;
+    b.append(iconCanvas(t.id === 'seed' ? 'seed' : t.id, t.k));
+    const key = document.createElement('span'); key.className = 'key'; key.textContent = i + 1;
+    const n = document.createElement('span'); n.className = 'n';
+    b.append(key, n);
+    b.addEventListener('click', () => { state.tool = i; ensureAudio(); hud(); });
+    belt.append(b); slots.push({b, n});
+  });
+  beltSig = '';
+}
+function updateBelt() {
+  TOOLS.forEach((t, i) => {
+    const s = slots[i]; if (!s) return;
+    s.b.setAttribute('aria-pressed', String(state.tool === i));
+    let label = '';
+    if (t.id === 'can') label = String(state.water);
+    if (t.id === 'seed') label = String(state.seeds[t.k]);
+    s.n.textContent = label;
+    s.b.classList.toggle('none', t.id === 'seed' && state.seeds[t.k] === 0);
+    s.b.setAttribute('aria-label', t.name + (label ? ', ' + label : ''));
+  });
+  const t = TOOLS[state.tool];
+  let h = '';
+  if (t.id === 'hoe') h = '<b>Мотыга</b> — вскопать землю на огороде';
+  else if (t.id === 'can') h = `<b>Лейка</b> — ${state.water}/${state.cap} л. Полить грядку. Воду набирают в колодце или пруду`;
+  else { const d = CROPS[t.k]; h = `<b>${d.seedName}</b> — ${state.seeds[t.k]} шт. Посадить на вскопанную землю, растёт ${d.grow} ${plural(d.grow, 'день', 'дня', 'дней')}`; }
+  els.holding.innerHTML = 'В руках: ' + h;
+}
+
+/* ---------- render ---------- */
+const cam = {x:0, y:0};
+function render(now) {
+  const p = player;
+  const rx = (p.x + (p.tx - p.x) * p.t) * T, ry = (p.y + (p.ty - p.y) * p.t) * T;
+  cam.x = clamp(Math.round(rx + 8 - VW * T / 2), 0, W * T - VW * T);
+  cam.y = clamp(Math.round(ry + 8 - VH * T / 2), 0, H * T - VH * T);
+  ctx.drawImage(bg, cam.x, cam.y, VW * T, VH * T, 0, 0, VW * T, VH * T);
+  ctx.save(); ctx.translate(-cam.x, -cam.y);
+  const x0 = Math.floor(cam.x / T), y0 = Math.floor(cam.y / T), sec = now / 1000;
+  for (let y = y0; y <= y0 + VH && y < H; y++) for (let x = x0; x <= x0 + VW && x < W; x++) {
+    const ch = map[y][x], X = x * T, Y = y * T, P = painter(ctx, X, Y);
+    if (ch === '~') {
+      P(0, 0, 16, 16, C.water);
+      if (inMap(x, y - 1) && map[y - 1][x] !== '~') P(0, 0, 16, 2, C.waterD);
+      for (let i = 0; i < 3; i++) P(Math.floor((hash(x, y, i) * 16 + sec * 5 * (i % 2 ? 1 : -1) + 32) % 13), 3 + i * 5, 3, 1, C.waterL);
+    } else if (ch === 'f') {
+      const pl = state.plots[x + ',' + y];
+      if (pl && pl.t) {
+        const s = pl.w ? C.soilW : C.soil, sd = pl.w ? C.soilWD : C.soilD;
+        P(1, 1, 14, 14, s); P(2, 4, 12, 1, sd); P(2, 8, 12, 1, sd); P(2, 12, 12, 1, sd);
+      }
+    }
+  }
+  for (let y = y0; y <= y0 + VH && y < H; y++) for (let x = x0; x <= x0 + VW && x < W; x++) {
+    if (map[y][x] !== 'f') continue;
+    const pl = state.plots[x + ',' + y];
+    if (pl && pl.c) drawCrop(ctx, x * T, y * T, pl.c.k, cropStage(pl.c));
+  }
+  if (!panelOpen && !p.moving) {
+    const [fx, fy] = front();
+    if (inMap(fx, fy)) {
+      ctx.strokeStyle = `rgba(255,250,220,${0.45 + 0.3 * Math.sin(now / 180)})`; ctx.lineWidth = 1;
+      ctx.strokeRect(fx * T + .5, fy * T + .5, T - 1, T - 1);
+    }
+  }
+  drawPlayer(ctx, Math.round(rx), Math.round(ry), p.face, p.moving ? Math.floor(p.walk * 8) % 2 : 0);
+  particles.forEach(q => { ctx.fillStyle = q.c; ctx.fillRect(Math.round(q.x), Math.round(q.y), 2, 2); });
+  ctx.restore();
+  if (state.min > 1080) {
+    ctx.fillStyle = `rgba(18,22,60,${Math.min(.5, (state.min - 1080) / 240 * .5)})`;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+}
+
+/* ---------- input ---------- */
+const KEYDIR = {ArrowUp:'up', KeyW:'up', ArrowDown:'down', KeyS:'down', ArrowLeft:'left', KeyA:'left', ArrowRight:'right', KeyD:'right'};
+function frontAct() { if (panelOpen || player.moving) return; const [x, y] = front(); act(x, y); }
+window.addEventListener('keydown', e => {
+  if (panelOpen) { if (e.code === 'Escape' && panelClosable) closePanel(); return; }
+  const d = KEYDIR[e.code];
+  if (d) { e.preventDefault(); ensureAudio(); if (!held.includes(d)) held.push(d); return; }
+  if (e.code === 'Space' || e.code === 'KeyE') { e.preventDefault(); if (!e.repeat) frontAct(); return; }
+  const m = /^(?:Digit|Numpad)([1-8])$/.exec(e.code);
+  if (m) { state.tool = +m[1] - 1; hud(); }
+});
+window.addEventListener('keyup', e => { const d = KEYDIR[e.code]; if (d) { const i = held.indexOf(d); if (i >= 0) held.splice(i, 1); } });
+window.addEventListener('blur', () => { held.length = 0; });
+
+function bfs(sx, sy, isGoal) {
+  const prev = new Int32Array(W * H).fill(-2), q = [sy * W + sx];
+  prev[sy * W + sx] = -1;
+  for (let qi = 0; qi < q.length; qi++) {
+    const cur = q[qi], cx = cur % W, cy = (cur / W) | 0;
+    if (isGoal(cx, cy)) {
+      const path = []; let c = cur;
+      while (prev[c] !== -1) { path.unshift([c % W, (c / W) | 0]); c = prev[c]; }
+      return path;
+    }
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (!walkable(nx, ny)) continue;
+      const ni = ny * W + nx;
+      if (prev[ni] !== -2) continue;
+      prev[ni] = cur; q.push(ni);
+    }
+  }
+  return null;
+}
+cv.addEventListener('pointerdown', e => {
+  if (panelOpen) return;
+  e.preventDefault(); ensureAudio();
+  const r = cv.getBoundingClientRect();
+  const tx = Math.floor(((e.clientX - r.left) / r.width * cv.width + cam.x) / T);
+  const ty = Math.floor(((e.clientY - r.top) / r.height * cv.height + cam.y) / T);
+  if (!inMap(tx, ty)) return;
+  const p = player, sx = p.moving ? p.tx : p.x, sy = p.moving ? p.ty : p.y, ch = map[ty][tx];
+  if (INTERACT.includes(ch)) {
+    const path = bfs(sx, sy, (x, y) => Math.abs(x - tx) + Math.abs(y - ty) === 1);
+    if (!path) return toast('Туда не подойти.');
+    held.length = 0; p.path = path; p.pending = {x:tx, y:ty};
+  } else if (walkable(tx, ty)) {
+    const path = bfs(sx, sy, (x, y) => x === tx && y === ty);
+    if (path) { held.length = 0; p.path = path; p.pending = null; }
+  }
+});
+document.querySelectorAll('.pad [data-dir]').forEach(b => {
+  const d = b.dataset.dir;
+  const off = () => { const i = held.indexOf(d); if (i >= 0) held.splice(i, 1); };
+  b.addEventListener('pointerdown', e => { e.preventDefault(); ensureAudio(); if (!held.includes(d)) held.push(d); try { b.setPointerCapture(e.pointerId); } catch (x) {} });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => b.addEventListener(ev, off));
+  b.addEventListener('contextmenu', e => e.preventDefault());
+});
+$('#actBtn').addEventListener('pointerdown', e => { e.preventDefault(); ensureAudio(); frontAct(); });
+$('#helpBtn').addEventListener('click', () => { ensureAudio(); openHelp(); });
+const soundBtn = $('#soundBtn');
+try { soundOn = localStorage.getItem(SAVE_KEY + '-sound') !== 'off'; } catch (e) {}
+const syncSound = () => { soundBtn.textContent = 'Звук: ' + (soundOn ? 'вкл' : 'выкл'); };
+soundBtn.addEventListener('click', () => {
+  soundOn = !soundOn; syncSound(); ensureAudio();
+  try { localStorage.setItem(SAVE_KEY + '-sound', soundOn ? 'on' : 'off'); } catch (e) {}
+});
+syncSound();
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+setInterval(() => { if (state) save(); }, 15000);
+
+/* ---------- boot ---------- */
+let last = 0;
+function loop(now) {
+  const dt = last ? Math.min(.05, (now - last) / 1000) : 0; last = now;
+  update(dt);
+  if (bgDirty) { bg = buildBg(); bgDirty = false; }
+  render(now); hud();
+  requestAnimationFrame(loop);
+}
+function start(data) {
+  state = merge((data && data.state) || load());
+  buildMap(); player = makePlayer(); buildBelt(); bgDirty = true;
+  if (window.claude && window.claude.hot && window.claude.hot.snapshot) window.claude.hot.snapshot(() => ({state:snap()}));
+  if (!state.intro) openIntro(); else toast('С возвращением! День ' + state.day + '.');
+  requestAnimationFrame(loop);
+}
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
