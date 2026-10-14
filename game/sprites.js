@@ -410,8 +410,12 @@ function iconCanvas(kind, k) {
     for (let i = 0; i < 10; i++) P(3 + i, 14 - i, 2, 2, C.trunk);
     P(9, 1, 4, 7, '#9aa3ad'); P(12, 2, 3, 5, '#9aa3ad'); P(14, 3, 1, 3, '#c9d0d6'); P(9, 1, 4, 1, '#c9d0d6');
   } else if (kind === 'pick') {
-    for (let i = 0; i < 11; i++) P(3 + i, 14 - i, 2, 2, C.trunk);
-    P(5, 2, 9, 2, '#9aa3ad'); P(3, 3, 3, 2, '#9aa3ad'); P(2, 4, 2, 3, '#9aa3ad'); P(13, 3, 2, 2, '#9aa3ad'); P(14, 4, 1, 3, '#9aa3ad'); P(5, 2, 9, 1, '#c9d0d6');
+    /* double pickaxe: a straight handle and a head pointing both ways */
+    P(7, 4, 2, 12, C.trunk); P(7, 4, 1, 12, C.trunkD);
+    P(3, 2, 10, 3, '#9aa3ad'); P(3, 2, 10, 1, '#c9d0d6'); P(3, 4, 10, 1, '#6f777f');
+    P(1, 3, 3, 2, '#9aa3ad'); P(0, 5, 2, 2, '#9aa3ad'); P(0, 7, 1, 1, '#6f777f');
+    P(12, 3, 3, 2, '#9aa3ad'); P(14, 5, 2, 2, '#9aa3ad'); P(15, 7, 1, 1, '#6f777f');
+    P(6, 1, 4, 5, '#6f777f'); P(6, 1, 4, 1, '#9aa3ad');
   } else if (kind === 'scythe') {
     for (let i = 0; i < 12; i++) P(4 + Math.floor(i * .6), 15 - i, 2, 1, C.trunk);
     P(3, 2, 9, 2, '#c9d0d6'); P(1, 3, 3, 2, '#c9d0d6'); P(0, 5, 2, 2, '#9aa3ad'); P(11, 3, 3, 1, '#9aa3ad');

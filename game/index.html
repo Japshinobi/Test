@@ -201,7 +201,7 @@ function newState() {
   KEYS.forEach(k => { seeds[k] = 0; produce[k] = 0; });
   seeds.radish = 6; seeds.potato = 3;
   return {v:1, day:1, min:360, money:100, water:10, cap:10, house:false, loc:'farm', shipped:{},
-          plots:{}, seeds, produce, tool:0, px:14, py:9, face:'down', mapV:2, toolsV:2, res:{wood:0, stone:0}, mods:{}, equip:{head:null, body:null, legs:null, feet:null}, intro:false, lateWarned:false, snowCover:false, snowTrod:{}};
+          plots:{}, seeds, produce, tool:0, px:14, py:9, face:'down', mapV:2, toolsV:2, res:{wood:0, stone:0}, mods:{}, drops:[], equip:{head:null, body:null, legs:null, feet:null}, intro:false, lateWarned:false, snowCover:false, snowTrod:{}};
 }
 function merge(s) {
   const b = newState();
@@ -216,6 +216,7 @@ function merge(s) {
   o.mapV = s.mapV;
   o.res = {...b.res, ...(s.res || {})};
   o.mods = s.mods && typeof s.mods === 'object' ? s.mods : {};
+  o.drops = Array.isArray(s.drops) ? s.drops : [];
   o.equip = {...b.equip, ...(s.equip || {})};
   /* saves from before the new tools: the belt order changed, take the hoe */
   if (s.toolsV !== 2) { o.tool = 0; o.toolsV = 2; }  /* a save from before the big farm has none: start() moves its beds */
@@ -430,6 +431,7 @@ function update(dt) {
     return;
   }
   state.min += dt * 4;
+  collectDrops(dt);
   if (state.min >= 1380 && !state.lateWarned) { state.lateWarned = true; toast(state.loc === 'farm' ? 'Уже 23:00. Пора домой спать.' : 'Уже 23:00. Пора возвращаться домой.'); }
   if (state.min >= 1440) { newDay('Тёма так заработался, что уснул прямо на улице. Соседи проводили его до дома.'); return; }
   const p = player;
@@ -450,7 +452,7 @@ function update(dt) {
 /* switching locations */
 const fade = {a:0, dir:0, to:null};
 function enterLocation(id, at, face) {
-  state.loc = id; state.px = at[0]; state.py = at[1]; state.face = face; hits = {};
+  state.loc = id; state.px = at[0]; state.py = at[1]; state.face = face; hits = {}; flying.length = 0;
   buildMap(); refreshLook(); player = makePlayer(); particles = [];
   save();
 }
@@ -538,19 +540,66 @@ function strike(tx, ty, c, dust) {
   if (n < NEED[c]) { hits[key] = n; return; }
   delete hits[key];
   const gain = {T:['wood', 4], U:['wood', 2], K:['wood', 1], R:['stone', 2]}[c];
-  state.res[gain[0]] += gain[1];
   modTile(tx, ty, c === 'T' ? 'U' : '.');
   puff(tx, ty, dust, 12);
-  toast('+' + gain[1] + ' ' + RES[gain[0]].name.toLowerCase() + (c === 'T' ? '. Остался пень.' : ''));
+  spill(tx, ty, 'res', gain[0], gain[1]);
+  if (c === 'T') toast('Дерево упало. Остался пень.');
+}
+
+/* ---------- items on the ground ---------- */
+/* What comes out of a tree, a stone or a bed flies out up to one tile away, at a random angle and distance,
+   and lies there until Тёма comes close: then it flies to him and goes into the inventory. */
+const PICK_R = 24, flying = [];
+function spill(tx, ty, kind, k, n) {
+  const cx = tx * T + T / 2, cy = ty * T + T / 2;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 13;
+    const d = {loc:state.loc, kind, k, x:Math.round(cx + Math.cos(a) * r), y:Math.round(cy + Math.sin(a) * r * .8)};
+    state.drops.push(d);
+    flying.push({d, x0:cx, y0:cy - 4, t:-i * .05, dur:.32 + Math.random() * .12});
+  }
+}
+const dropIcons = {};
+function dropIcon(d) { const key = d.kind + d.k; return dropIcons[key] || (dropIcons[key] = iconCanvas(d.kind === 'res' ? d.k : 'prod', d.k)); }
+function collectDrops(dt) {
+  const p = player, px = (p.x + (p.tx - p.x) * p.t) * T + T / 2, py = (p.y + (p.ty - p.y) * p.t) * T + T / 2;
+  for (let i = flying.length - 1; i >= 0; i--) { flying[i].t += dt; if (flying[i].t >= flying[i].dur + .2) flying.splice(i, 1); }
+  const busy = new Set(flying.map(f => f.d));
+  for (let i = state.drops.length - 1; i >= 0; i--) {
+    const d = state.drops[i];
+    if (d.loc !== state.loc || busy.has(d)) continue;
+    const dx = px - d.x, dy = py - d.y, dist = Math.hypot(dx, dy);
+    if (dist > PICK_R) continue;
+    if (dist < 4) {
+      state.drops.splice(i, 1);
+      if (d.kind === 'res') state.res[d.k] += 1; else state.produce[d.k] += 1;
+      SFX.pickup();
+      toast('+1 ' + (d.kind === 'res' ? RES[d.k].name : CROPS[d.k].product).toLowerCase());
+      continue;
+    }
+    const sp = (60 + (PICK_R - dist) * 8) * dt;
+    d.x += dx / dist * Math.min(sp, dist); d.y += dy / dist * Math.min(sp, dist);
+  }
+}
+function drawDrops(now) {
+  const fly = new Map(flying.map(f => [f.d, f]));
+  state.drops.forEach(d => {
+    if (d.loc !== state.loc) return;
+    let x = d.x, y = d.y, z = 0;
+    const f = fly.get(d);
+    if (f) { const u = Math.max(0, Math.min(1, f.t / f.dur)); x = f.x0 + (d.x - f.x0) * u; y = f.y0 + (d.y - f.y0) * u; z = Math.sin(u * Math.PI) * 7; }
+    else z = (Math.sin(now / 300 + d.x) + 1) * .5;
+    ctx.fillStyle = 'rgba(6,16,42,.25)'; ctx.fillRect(Math.round(x) - 3, Math.round(y) + 3, 6, 1);
+    ctx.drawImage(dropIcon(d), Math.round(x) - 4, Math.round(y - z) - 5, 8, 8);
+  });
 }
 
 function harvest(tx, ty, pl) {
   const d = CROPS[pl.c.k], n = d.yield || 1;
-  state.produce[pl.c.k] += n;
+  spill(tx, ty, 'prod', pl.c.k, n);
   if (d.regrow) { pl.c.ripe = false; pl.c.age = d.grow - d.regrow; if (d.tree) pl.c.grown = true; }
   else pl.c = null;
   SFX.harvest(); puff(tx, ty, d.color, 10);
-  toast('+' + n + ' ' + d.product.toLowerCase());
 }
 
 function factor(k, day = state.day) { return 0.8 + 0.45 * hash(day, KEYS.indexOf(k) + 1, 99); }
@@ -813,6 +862,7 @@ const SFX = {
   harvest: () => { beep(660, .07, 'square', .04); setTimeout(() => beep(880, .1, 'square', .04), 70); },
   coin: () => { beep(988, .05, 'square', .04); setTimeout(() => beep(1319, .12, 'square', .04), 50); },
   nope: () => beep(110, .12, 'sawtooth', .03),
+  pickup: () => { beep(880, .04, 'triangle', .05); setTimeout(() => beep(1175, .05, 'triangle', .04), 35); },
   chop: () => { beep(240, .06, 'square', .06, -90); setTimeout(() => beep(180, .05, 'triangle', .05), 40); },
   mine: () => { beep(520, .04, 'square', .05, -200); setTimeout(() => beep(300, .06, 'sawtooth', .03, -100), 30); }
 };
@@ -921,6 +971,7 @@ function render(now) {
       ctx.strokeRect(fx * T + a / 2, fy * T + a / 2, T - a, T - a);
     }
   }
+  drawDrops(now);
   /* everything standing on the ground this frame */
   const list = [];
   const inView = (px, py) => px > cam.x - 96 && px < cam.x + viewW + 48 && py > cam.y - 8 && py < cam.y + viewH + 64;
