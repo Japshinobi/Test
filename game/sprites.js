@@ -418,34 +418,47 @@ function drawTent(g, open) {
   if (open) drawGoods(P, 13, 49, 'any', 6);
   P(4, 54, 3, 10, C.fenceD); P(57, 54, 3, 10, C.fenceD);
 }
-/* round fountain, 48 × 56 (stands on 3 × 3 tiles, the spout rises above). The water is drawn every frame by drawFountainWater */
+/* round fountain seen from above at an angle: an oval basin with a visible front wall, 48 × 56
+   (stands on 3 × 3 tiles, the spout rises above). The water is drawn every frame by drawFountainWater */
+const FC = {cx:24, cy:37, rx:23, ry:12, wall:5, irx:19, iry:9};
+const ell = (P, cx, cy, rx, ry, col, from = -ry, to = ry) => {
+  for (let y = from; y <= to; y++) { const w = Math.round(rx * Math.sqrt(Math.max(0, 1 - (y / ry) ** 2))); if (w > 0) P(cx - w, cy + y, w * 2, 1, col); }
+};
 function drawFountain(g) {
-  const P = painter(g, 0, 0), cx = 24, cy = 34, rx = 23, ry = 19;
-  for (let y = -ry; y <= ry; y++) { const w = Math.round(rx * Math.sqrt(1 - (y / ry) ** 2)); P(cx - w, cy + y, w * 2, 1, y > ry - 5 ? '#6f6f66' : y > 0 ? C.stoneD : C.stone); }
-  for (let y = -ry + 3; y <= ry - 4; y++) { const w = Math.round((rx - 4) * Math.sqrt(1 - (y / (ry - 3)) ** 2)); if (w > 0) P(cx - w, cy + y, w * 2, 1, y < -ry + 5 ? C.stoneL : '#2f6fd8'); }
-  P(21, 18, 6, 18, C.stone); P(21, 18, 2, 18, C.stoneL); P(25, 18, 2, 18, C.stoneD);
-  P(16, 14, 16, 4, C.stone); P(17, 13, 14, 1, C.stoneL); P(16, 17, 16, 1, C.stoneD); P(19, 14, 10, 2, '#2f6fd8');
+  const P = painter(g, 0, 0), {cx, cy, rx, ry, wall, irx, iry} = FC;
+  /* front wall: the lower half of the oval pushed down */
+  for (let d = wall; d > 0; d--) ell(P, cx, cy + d, rx, ry, d === wall ? '#5f5f57' : C.stoneD, 0, ry);
+  ell(P, cx, cy, rx, ry, C.stone);
+  ell(P, cx, cy, rx, ry, C.stoneL, -ry, -ry + 2);
+  ell(P, cx, cy + 1, irx, iry, '#2f6fd8');
+  ell(P, cx, cy + 1, irx, iry, '#24589f', -iry, -iry + 1);
+  /* pedestal and the top bowl */
+  P(21, 18, 6, 20, C.stone); P(21, 18, 2, 20, C.stoneL); P(25, 18, 2, 20, C.stoneD);
+  ell(P, cx, 19, 9, 3, C.stoneD, 0, 3); ell(P, cx, 17, 9, 3, C.stone); ell(P, cx, 17, 7, 2, '#2f6fd8');
 }
 function drawFountainWater(g, X, Y, sec, ice) {
-  const P = painter(g, X, Y), cx = 24, cy = 34;
+  const P = painter(g, X, Y), {cx, cy, irx, iry} = FC;
   if (ice) {
-    for (let y = -14; y <= 13; y++) { const w = Math.round(19 * Math.sqrt(Math.max(0, 1 - (y / 16) ** 2))); if (w > 0) P(cx - w, cy + y, w * 2, 1, '#b9dcf2'); }
-    P(21, 18, 6, 18, C.stone); P(21, 18, 2, 18, C.stoneL); P(25, 18, 2, 18, C.stoneD); P(19, 14, 10, 2, '#b9dcf2');
-    P(10, 30, 6, 1, '#ffffff'); P(30, 38, 5, 1, '#ffffff');
+    ell(P, cx, cy + 1, irx, iry, '#b9dcf2'); ell(P, cx, 17, 7, 2, '#b9dcf2');
+    P(21, 18, 6, 20, C.stone); P(21, 18, 2, 20, C.stoneL); P(25, 18, 2, 20, C.stoneD);
+    P(10, cy, 6, 1, '#ffffff'); P(31, cy + 4, 5, 1, '#ffffff');
     return;
   }
-  /* ripples running outwards in the basin */
+  /* ripples running outwards in the basin, flattened by the angle */
   for (let k = 0; k < 2; k++) {
-    const f = (sec * .45 + k * .5) % 1, rr = 6 + f * 12;
-    for (let i = 0; i < 18; i++) { const a = i / 18 * Math.PI * 2, px = Math.round(cx + Math.cos(a) * rr * 1.15), py = Math.round(cy + 2 + Math.sin(a) * rr * .8); if (py > 20 && py < 50) P(px, py, 2, 1, '#6a98f4'); }
+    const f = (sec * .45 + k * .5) % 1, rr = 5 + f * 13;
+    for (let i = 0; i < 22; i++) {
+      const a = i / 22 * Math.PI * 2, px = Math.round(cx + Math.cos(a) * rr), py = Math.round(cy + 1 + Math.sin(a) * rr * iry / irx);
+      if (Math.abs(px - cx) > 3 || py > cy + 2) P(px, py, 2, 1, '#6a98f4');
+    }
   }
-  /* jets falling from the top bowl */
-  for (let i = 0; i < 10; i++) {
-    const side = i % 2 ? 1 : -1, ph = (sec * 1.3 + i * .137) % 1;
-    const px = Math.round(cx + side * (3 + ph * (6 + (i % 3) * 3))), py = Math.round(14 - Math.sin(ph * Math.PI) * 9 + ph * ph * 22);
+  /* jets from the top bowl falling into the basin */
+  for (let i = 0; i < 12; i++) {
+    const side = i % 2 ? 1 : -1, ph = (sec * 1.3 + i * .113) % 1, reach = 7 + (i % 3) * 3;
+    const px = Math.round(cx + side * (5 + ph * reach)), py = Math.round(16 - Math.sin(ph * Math.PI) * 6 + ph * ph * 22);
     P(px, py, 1, 2, ph < .5 ? '#d8ecff' : '#9cc8f4');
   }
-  P(23, 6 + Math.round(Math.sin(sec * 8)), 2, 8, '#d8ecff');
+  P(23, 8 + Math.round(Math.sin(sec * 8)), 2, 9, '#d8ecff');
 }
 /* wooden sign on two posts */
 function drawSign(g) {
