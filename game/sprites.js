@@ -44,9 +44,9 @@ function drawPath(g, x, y) {
   P(0, 0, 16, 16, C.path);
   for (let i = 0; i < 5; i++) P(Math.floor(hash(x, y, i + 3) * 14), Math.floor(hash(x, y, i + 30) * 14), 2, 1, i % 2 ? C.pathD : C.pathL);
 }
-function drawFlowers(g, x, y) {
-  drawGrass(g, x, y);
-  const P = painter(g, x * T, y * T), cols = ['#f4f1e8', '#f5d33b', '#e88bb5'];
+function drawFlowers(g, x, y) { drawGrass(g, x, y); drawFlowerDots(g, x * T, y * T, x, y); }
+function drawFlowerDots(g, X, Y, x, y) {
+  const P = painter(g, X, Y), cols = ['#f4f1e8', '#f5d33b', '#e88bb5'];
   for (let i = 0; i < 2; i++) {
     const fx = 2 + Math.floor(hash(x, y, i + 40) * 11), fy = 2 + Math.floor(hash(x, y, i + 50) * 11);
     P(fx, fy, 3, 3, cols[Math.floor(hash(x, y, i + 60) * 3)]); P(fx + 1, fy + 1, 1, 1, '#c8922a');
@@ -57,20 +57,24 @@ function drawDirt(g, x, y) {
   P(0, 0, 16, 16, C.farm);
   for (let i = 0; i < 7; i++) P(Math.floor(hash(x, y, i + 70) * 15), Math.floor(hash(x, y, i + 80) * 15), 2, 1, i % 2 ? C.farmD : C.farmL);
 }
-function drawLocked(g, x, y) {
-  drawGrass(g, x, y);
-  const P = painter(g, x * T, y * T), r = hash(x, y, 9);
-  if (r < 0.35) { P(4, 6, 7, 5, C.stone); P(4, 6, 7, 1, C.stoneL); P(5, 10, 6, 1, C.stoneD); }
-  else if (r < 0.7) { P(3, 4, 1, 6, C.leafD); P(5, 2, 1, 8, C.leafD); P(7, 5, 1, 5, C.leafD); P(10, 7, 1, 5, C.leafD); P(12, 5, 1, 6, C.leafD); }
+function decoKind(x, y) { const r = hash(x, y, 9); return r < 0.35 ? 0 : r < 0.7 ? 1 : 2; }
+function drawLocked(g, x, y) { drawGrass(g, x, y); drawDeco(g, x * T, y * T, decoKind(x, y)); }
+/* overgrowth on uncleared land: 0 stone, 1 weeds, 2 stump */
+function drawDeco(g, X, Y, v) {
+  const P = painter(g, X, Y);
+  if (v === 0) { P(4, 6, 7, 5, C.stone); P(4, 6, 7, 1, C.stoneL); P(5, 10, 6, 1, C.stoneD); }
+  else if (v === 1) { P(3, 4, 1, 6, C.leafD); P(5, 2, 1, 8, C.leafD); P(7, 5, 1, 5, C.leafD); P(10, 7, 1, 5, C.leafD); P(12, 5, 1, 6, C.leafD); }
   else { P(5, 8, 6, 5, C.trunk); P(5, 8, 6, 2, '#a0784f'); P(7, 8, 2, 1, C.trunkD); }
 }
-function drawFence(g, x, y, is) {
-  drawGrass(g, x, y);
-  const P = painter(g, x * T, y * T);
-  if (is(x - 1, y)) { P(0, 6, 8, 2, C.fence); P(0, 10, 8, 2, C.fence); }
-  if (is(x + 1, y)) { P(8, 6, 8, 2, C.fence); P(8, 10, 8, 2, C.fence); }
-  if (is(x, y - 1)) P(7, 0, 2, 6, C.fence);
-  if (is(x, y + 1)) P(7, 12, 2, 4, C.fence);
+function fenceMask(x, y, is) { return (is(x - 1, y) ? 1 : 0) | (is(x + 1, y) ? 2 : 0) | (is(x, y - 1) ? 4 : 0) | (is(x, y + 1) ? 8 : 0); }
+function drawFence(g, x, y, is) { drawGrass(g, x, y); drawFencePiece(g, x * T, y * T, fenceMask(x, y, is)); }
+/* one fence section; mask says which neighbours it joins: 1 left, 2 right, 4 up, 8 down */
+function drawFencePiece(g, X, Y, m) {
+  const P = painter(g, X, Y);
+  if (m & 1) { P(0, 6, 8, 2, C.fence); P(0, 10, 8, 2, C.fence); }
+  if (m & 2) { P(8, 6, 8, 2, C.fence); P(8, 10, 8, 2, C.fence); }
+  if (m & 4) P(7, 0, 2, 6, C.fence);
+  if (m & 8) P(7, 12, 2, 4, C.fence);
   P(5, 3, 6, 11, C.fence); P(5, 3, 6, 1, C.fenceL); P(5, 13, 6, 1, C.fenceD); P(10, 4, 1, 9, C.fenceD);
 }
 function drawTree(g, v = 0) {
@@ -293,7 +297,15 @@ function cached(key, w, h, ax, ay, fn) {
   if (!o) {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const g = c.getContext('2d'); g.imageSmoothingEnabled = false; fn(g);
-    o = {img:c, ax, ay, w, h}; cache.set(key, o);
+    /* fy: the lowest painted row. The shadow starts there, so it always touches the object's base */
+    let fy = h;
+    try {
+      const px = g.getImageData(0, 0, w, h).data;
+      fy = 0;
+      for (let y = h - 1; y >= 0 && !fy; y--) for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3] > 0) { fy = y + 1; break; }
+      if (!fy) fy = h;
+    } catch (e) {}
+    o = {img:c, ax, ay, w, h, fy}; cache.set(key, o);
   }
   return o;
 }
@@ -310,6 +322,9 @@ function sprite(kind, a, b) {
     case 'market': return cached('market', 80, 48, 0, 48, g => drawMarket(g, 0, 0));
     case 'player': return cached('player' + a + b, 16, 24, 8, 24, g => drawPlayer(g, 0, 0, a, b));
     case 'crop':   return cached('crop' + a + b, 32, 44, 16, 44, g => drawCrop(g, 8, 28, a, b));
+    case 'fence':  return cached('fence' + a, 16, 16, 8, 16, g => drawFencePiece(g, 0, 0, a));
+    case 'deco':   return cached('deco' + a, 16, 16, 8, 16, g => drawDeco(g, 0, 0, a));
+    case 'flower': return cached('flower' + a + ',' + b, 16, 16, 8, 16, g => drawFlowerDots(g, 0, 0, a, b));
   }
   return null;
 }
@@ -341,8 +356,9 @@ function sunAt(min) {
 }
 /* g must already carry the world transform; (px, py) is where the object touches the ground */
 function castShadow(g, o, px, py, sun) {
+  const foot = py - o.ay + o.fy;
   g.save();
-  g.transform(1, 0, -sun.shear, -sun.len, px - o.ax + sun.shear * o.ay, py + sun.len * o.ay);
+  g.transform(1, 0, -sun.shear, -sun.len, px - o.ax + sun.shear * o.fy, foot + sun.len * o.fy);
   g.drawImage(silhouette(o.img), 0, 0);
   g.restore();
 }
@@ -370,5 +386,5 @@ function applyLight(g, w, h, min) {
 
 
 return {T, C, CROPS, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, drawProduce, iconCanvas, drawPlayer,
-  sprite, silhouette, sunAt, castShadow, tintAt, applyLight};
+  decoKind, fenceMask, sprite, silhouette, sunAt, castShadow, tintAt, applyLight};
 })();

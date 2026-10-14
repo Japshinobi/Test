@@ -151,7 +151,7 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-const {C, CROPS, hash, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, cropStage, drawSoil, drawWater, iconCanvas, sprite, sunAt, castShadow, applyLight} = window.OgorodSprites;
+const {C, CROPS, hash, drawGrass, drawPath, drawDirt, decoKind, fenceMask, cropStage, drawSoil, drawWater, iconCanvas, sprite, sunAt, castShadow, applyLight} = window.OgorodSprites;
 const KEYS = Object.keys(CROPS);
 const TOOLS = [{id:'hoe', name:'Мотыга'}, {id:'can', name:'Лейка'}, ...KEYS.map(k => ({id:'seed', k, name:CROPS[k].seedName}))];
 const UPGRADES = [
@@ -228,9 +228,6 @@ function buildBg() {
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const ch = map[y][x];
     if (ch === '=') drawPath(g, x, y);
-    else if (ch === ',') drawFlowers(g, x, y);
-    else if (ch === '#') drawFence(g, x, y, (a, b) => inMap(a, b) && map[b][a] === '#');
-    else if (ch === 'F' || ch === 'G') drawLocked(g, x, y);
     else if (ch === 'f') drawDirt(g, x, y);
     else if (ch === '~') { g.fillStyle = C.water; g.fillRect(x * T, y * T, T, T); }
     else drawGrass(g, x, y);
@@ -246,6 +243,9 @@ function buildObjects() {
     if (ch === 'T') objects.push({kind:'tree', a:hash(x, y, 11) < 0.35 ? 1 : 0, px, py});
     else if (ch === 'B') objects.push({kind:'bush', px, py});
     else if (ch === 'W') objects.push({kind:'well', px, py});
+    else if (ch === '#') objects.push({kind:'fence', a:fenceMask(x, y, (a, b) => inMap(a, b) && map[b][a] === '#'), px, py});
+    else if (ch === 'F' || ch === 'G') objects.push({kind:'deco', a:decoKind(x, y), px, py});
+    else if (ch === ',') objects.push({kind:'flower', a:x, b:y, px, py});
   }
   objects.push({kind:'house', px:2 * T, py:4 * T});
   objects.push({kind:'market', px:26 * T, py:10 * T});
@@ -624,7 +624,7 @@ function render(now) {
   /* everything standing on the ground this frame */
   const list = [];
   const inView = (px, py) => px > cam.x - 96 && px < cam.x + viewW + 48 && py > cam.y - 8 && py < cam.y + viewH + 64;
-  objects.forEach(o => { if (inView(o.px, o.py)) list.push({o:sprite(o.kind, o.kind === 'house' ? state.house : o.a), px:o.px, py:o.py}); });
+  objects.forEach(o => { if (inView(o.px, o.py)) list.push({o:sprite(o.kind, o.kind === 'house' ? state.house : o.a, o.b), px:o.px, py:o.py}); });
   for (let y = y0; y <= Math.min(H - 1, y1 + 2); y++) for (let x = x0; x <= x1; x++) {
     if (map[y][x] !== 'f') continue;
     const pl = state.plots[x + ',' + y];
