@@ -806,6 +806,11 @@ function cached(key, w, h, ax, ay, fn) {
 }
 /* look: the day's lookFor(); summer by default. Snow caps and season colours are baked into the cached canvas */
 function sprite(kind, a, b, look = SUMMER) {
+  const o = spriteRaw(kind, a, b, look), bx = BOXES[kind];
+  if (o && bx && !o.shadow) { const boxes = Array.isArray(bx) ? bx : bx[a]; if (boxes) o.shadow = (g, o2, px, py, sun) => boxShadow(g, px - o2.ax, py - o2.ay, boxes, sun); }
+  return o;
+}
+function spriteRaw(kind, a, b, look) {
   const lk = look.key, sn = g => { if (look.snow) snowCap(g.canvas); };
   switch (kind) {
     case 'tree':   return cached('tree' + a + lk, 32, 40, 16, 40, g => {
@@ -919,6 +924,34 @@ function volumeShadow(g, X, Y, f, wallH, peakH, ridge, sun) {
     const w = Math.max(ridge / 2, hw * k), d = hd * k;
     g.fillRect(Math.round(X + cx - w + sun.shear * h), Math.round(Y + cy - d + sun.len * h), Math.max(1, Math.round(w * 2)), Math.max(1, Math.round(d * 2)));
   }
+}
+/* Objects with depth or lying on the ground are described as simple boxes for their shadow:
+   a footprint on the ground (x0..x1, y0..y1 in the sprite), heights h0..h1, and a top shape:
+   'point' narrows to a point (rock, haystack), 'ridge' narrows only in depth (a gable roof). */
+const BOXES = {
+  house:     [{x0:2, x1:62, y0:36, y1:60, h0:0, h1:28}, {x0:2, x1:62, y0:36, y1:60, h0:28, h1:44, top:'ridge'}, {x0:46, x1:53, y0:42, y1:46, h0:0, h1:52}],
+  well:      [{x0:1, x1:15, y0:20, y1:28, h0:0, h1:6}, {x0:2, x1:4, y0:22, y1:24, h0:0, h1:23}, {x0:12, x1:14, y0:22, y1:24, h0:0, h1:23}, {x0:0, x1:16, y0:19, y1:26, h0:22, h1:26}],
+  stall:     [{x0:2, x1:62, y0:26, y1:30, h0:0, h1:28}, {x0:0, x1:64, y0:26, y1:44, h0:28, h1:31}, {x0:0, x1:64, y0:40, y1:48, h0:0, h1:12}],
+  stallside: [{x0:0, x1:5, y0:20, y1:62, h0:0, h1:26}, {x0:0, x1:20, y0:20, y1:62, h0:26, h1:29}, {x0:32, x1:46, y0:28, y1:62, h0:0, h1:12}],
+  stallback: [{x0:2, x1:62, y0:34, y1:40, h0:0, h1:24}, {x0:0, x1:64, y0:20, y1:40, h0:24, h1:27}],
+  bin:       [{x0:1, x1:15, y0:9, y1:16, h0:0, h1:7}],
+  rock:      [{x0:2, x1:14, y0:6, y1:12, h0:0, h1:7, top:'point'}],
+  stump:     [{x0:3, x1:13, y0:6, y1:10, h0:0, h1:5}],
+  twigs:     [{x0:1, x1:15, y0:1, y1:8, h0:0, h1:1}],
+  haystack:  [{x0:2, x1:22, y0:9, y1:18, h0:0, h1:14, top:'point'}],
+  barrier:   {h:[{x0:1, x1:4, y0:15, y1:18, h0:0, h1:14}, {x0:28, x1:31, y0:15, y1:18, h0:0, h1:10}, {x0:2, x1:31, y0:15, y1:18, h0:9, h1:11}],
+              v:[{x0:5, x1:9, y0:2, y1:5, h0:0, h1:10}, {x0:5, x1:9, y0:32, y1:36, h0:0, h1:10}, {x0:5, x1:8, y0:3, y1:34, h0:8, h1:10}]}
+};
+function boxShadow(g, X, Y, boxes, sun) {
+  g.fillStyle = '#06102a';
+  boxes.forEach(b => {
+    const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2, hw = (b.x1 - b.x0) / 2, hd = (b.y1 - b.y0) / 2;
+    for (let h = b.h0; h <= b.h1; h++) {
+      const k = b.top ? 1 - (h - b.h0) / Math.max(1, b.h1 - b.h0) : 1;
+      const w = b.top === 'point' ? hw * k : hw, d = hd * k;
+      g.fillRect(Math.round(X + cx - w + sun.shear * h), Math.round(Y + cy - d + sun.len * h), Math.max(1, Math.round(w * 2)), Math.max(1, Math.round(d * 2)));
+    }
+  });
 }
 function tentShadow(g, o, px, py, sun) {
   volumeShadow(g, px - o.ax, py - o.ay, {x0:4, x1:60, y0:38, y1:62}, 22, 50, 2, sun);
