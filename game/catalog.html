@@ -1,0 +1,394 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Арт-библия Дедушкиного огорода</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rubik:wght@400;500;700&display=swap">
+<style>
+/* Layout: one long scroll in the game's own Terraria-style look: sticky section bar, then one block per art section with sprite cards and its idea list */
+:root{
+  --sky:#0f1638; --panel:#2c3c8c; --panel-2:#3d4fa8; --edge:#151b4a;
+  --text:#ffffff; --muted:#aab4e8; --gold:#ffd24a; --leaf:#2f9e3a; --down:#ff7a5c;
+  --f-pixel:"Press Start 2P","Courier New",monospace;
+  --f-ui:"Rubik","Segoe UI",system-ui,sans-serif;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{background:var(--sky);color:var(--text)}
+body{font-family:var(--f-ui);font-size:16px;line-height:1.45;margin:0}
+.wrap{max-width:1040px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+a{color:var(--gold)}
+h1{font-family:var(--f-pixel);font-weight:400;font-size:clamp(17px,3.4vw,26px);line-height:1.45;color:var(--gold);text-shadow:2px 2px 0 #000;margin:0 0 10px;text-wrap:balance}
+h2{font-family:var(--f-pixel);font-weight:400;font-size:clamp(14px,2.4vw,17px);line-height:1.5;color:var(--gold);text-shadow:2px 2px 0 #000;margin:0;text-wrap:balance}
+h3{font-size:16px;font-weight:500;margin:0;color:var(--gold)}
+p{margin:0}
+.lead{max-width:65ch;color:#dfe5ff}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;margin-bottom:18px}
+.hero canvas{width:min(100%,384px);height:auto;aspect-ratio:12/5;image-rendering:pixelated;border:3px solid var(--edge);border-radius:6px;box-shadow:0 0 0 2px var(--panel-2)}
+.hero .links{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+@media (max-width:720px){.hero{grid-template-columns:minmax(0,1fr)}}
+.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(15,22,56,.94);border-bottom:2px solid var(--edge);margin-inline:-16px;padding:8px 16px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin}
+.nav a{flex:none;text-decoration:none;color:var(--text);background:var(--panel);border:2px solid var(--edge);border-radius:6px;padding:4px 10px;font-size:14px;white-space:nowrap}
+.nav a:hover{border-color:var(--gold)}
+.nav a .n{color:var(--gold);margin-left:4px;font-variant-numeric:tabular-nums}
+.view{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:14px 0 4px;font-size:14px;color:var(--muted)}
+.seg{display:inline-flex;border:2px solid var(--edge);border-radius:6px;overflow:hidden}
+.seg button{font:inherit;background:var(--panel);color:var(--text);border:0;padding:4px 10px;cursor:pointer}
+.seg button+button{border-left:2px solid var(--edge)}
+.seg button[aria-pressed="true"]{background:var(--edge);color:var(--gold)}
+section{padding-top:26px;scroll-margin-top:56px}
+.sec-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 16px;margin-bottom:6px}
+.sec-head .count{color:var(--muted);font-size:14px}
+.sec-desc{color:#dfe5ff;max-width:65ch;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.card{background:var(--panel);border:2px solid var(--edge);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.stagebox{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end;justify-content:center;padding:10px;border-radius:4px;min-height:84px;overflow-x:auto}
+.stagebox figure{min-width:0}
+.bg-grass .stagebox{background:#33a532}
+.bg-check .stagebox{background:repeating-conic-gradient(#c9cde0 0 25%,#ffffff 0 50%) 0 0/16px 16px}
+.bg-dark .stagebox{background:var(--edge)}
+.stagebox figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:3px}
+.stagebox canvas{image-rendering:pixelated;display:block}
+.stagebox figcaption{font-size:11px;color:#fff;text-shadow:1px 1px 0 #000;white-space:nowrap}
+.card .nm{font-weight:500}
+.card .meta{font-size:13px;color:var(--muted)}
+.card.wide{grid-column:span 2}
+@media (max-width:420px){.card.wide{grid-column:auto}}
+.rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.rule{background:var(--panel);border:2px solid var(--edge);border-radius:8px;padding:12px}
+.rule .k{font-size:13px;color:var(--muted)}
+.rule .v{font-size:18px;font-weight:500;margin:2px 0 4px}
+.rule p{font-size:14px;color:#dfe5ff}
+.pal{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.sw{display:grid;grid-template-columns:36px minmax(0,1fr);gap:8px;align-items:center;background:var(--panel);border:2px solid var(--edge);border-radius:6px;padding:6px}
+.sw i{display:block;width:36px;height:36px;border:2px solid var(--edge);border-radius:3px}
+.sw .nm{font-size:14px;line-height:1.2}
+.sw code{font-size:12px;color:var(--muted)}
+.pal-group{margin:14px 0 6px;font-size:14px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.ideas{margin-top:12px;background:rgba(21,27,74,.6);border:2px dashed var(--panel-2);border-radius:8px;padding:12px}
+.ideas-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.ideas-head .hint{font-size:13px;color:var(--muted)}
+.idea-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.idea{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start;background:var(--panel);border:2px solid var(--edge);border-radius:6px;padding:8px 10px}
+.idea.done{opacity:.6}
+.idea.done .txt{text-decoration:line-through}
+.idea .txt{white-space:pre-wrap;overflow-wrap:anywhere}
+.idea .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;font-size:12px}
+.tag{border:1px solid var(--panel-2);border-radius:999px;padding:0 8px;color:var(--muted)}
+.tag.p1{border-color:var(--gold);color:var(--gold)}
+.tag.st-work{border-color:#6fd0ff;color:#6fd0ff}
+.tag.st-done{border-color:#7be05a;color:#7be05a}
+.idea .acts{display:flex;gap:4px}
+.empty{font-size:14px;color:var(--muted)}
+form.add{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+form.add .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+textarea,select{font:inherit;font-size:15px;background:var(--sky);color:var(--text);border:2px solid var(--edge);border-radius:6px;padding:6px 8px}
+textarea{min-height:58px;resize:vertical;width:100%;box-sizing:border-box}
+select{max-width:100%}
+textarea:focus,select:focus{border-color:var(--gold);outline:none}
+.btn{font:inherit;font-size:14px;background:var(--leaf);color:#fff;border:2px solid var(--edge);border-radius:6px;padding:5px 12px;cursor:pointer;box-shadow:0 2px 0 var(--edge);text-shadow:1px 1px 0 #000}
+.btn:hover{border-color:var(--gold)}
+.btn.alt{background:var(--panel-2)}
+.btn.ghost{background:transparent;box-shadow:none;padding:2px 8px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.status{font-size:13px;color:var(--muted)}
+.status.err{color:var(--down)}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+footer{margin-top:36px;font-size:13px;color:var(--muted)}
+</style>
+
+<div class="wrap">
+  <div class="hero">
+    <div>
+      <h1>Арт-библия Дедушкиного огорода</h1>
+      <p class="lead">Вся графика игры по разделам: персонажи, растения, предметы, постройки, поверхности, интерфейс и эффекты. Спрайты на этой странице берутся из того же файла, что и в игре, поэтому здесь всегда видна текущая версия. Под каждым разделом можно записывать идеи.</p>
+      <div class="links">
+        <a class="btn" href="https://claude.ai/artifact/AQzu1Fg3NicPmeEvhwJBGf" target="_blank" rel="noopener">Открыть игру</a>
+        <a class="btn alt" href="#rules">Правила стиля</a>
+      </div>
+    </div>
+    <canvas id="scene" width="192" height="80" aria-label="Сценка из игры: дом, Тёма у грядок, яблоня"></canvas>
+  </div>
+
+  <nav class="nav" id="nav" aria-label="Разделы"></nav>
+
+  <div class="view">
+    <span>Масштаб</span>
+    <div class="seg" id="zoomSeg"><button type="button" data-z="2">×2</button><button type="button" data-z="4" aria-pressed="true">×4</button><button type="button" data-z="6">×6</button></div>
+    <span>Фон</span>
+    <div class="seg" id="bgSeg"><button type="button" data-bg="grass" aria-pressed="true">Трава</button><button type="button" data-bg="check">Шахматка</button><button type="button" data-bg="dark">Тёмный</button></div>
+  </div>
+
+  <section id="rules">
+    <div class="sec-head"><h2>Правила стиля</h2></div>
+    <p class="sec-desc">Общие договорённости, чтобы новые рисунки выглядели как часть одной игры.</p>
+    <div class="rules">
+      <div class="rule"><div class="k">Размер клетки</div><div class="v">16 × 16 пикселей</div><p>Персонаж занимает одну клетку. Дом — 4 × 3 клетки, рынок — 5 × 3, яблоня выходит на полклетки вверх.</p></div>
+      <div class="rule"><div class="k">Вид</div><div class="v">Сверху, слегка под углом</div><p>Как в Stardew Valley: видна крыша и передняя стена дома, у персонажа видно лицо и одежду.</p></div>
+      <div class="rule"><div class="k">Свет</div><div class="v">Сверху слева</div><p>Блики рисуются светлым цветом вверху и слева, тени — тёмным внизу и справа.</p></div>
+      <div class="rule"><div class="k">Обводка</div><div class="v">Без чёрного контура</div><p>Форму задаёт тёмный оттенок того же цвета, а не чёрная линия.</p></div>
+      <div class="rule"><div class="k">Палитра</div><div class="v">В духе Террарии</div><p>Насыщенная зелень, бурая земля, песок, синяя вода. Каждый материал — три оттенка: светлый, основной, тёмный.</p></div>
+      <div class="rule"><div class="k">Анимация</div><div class="v">2 кадра ходьбы</div><p>Персонаж: 4 направления по 2 кадра. Вода движется сама, растения меняются раз в игровой день.</p></div>
+    </div>
+  </section>
+
+  <section id="palette">
+    <div class="sec-head"><h2>Палитра</h2><span class="count" id="palCount"></span></div>
+    <p class="sec-desc">Цвета мира. Новые спрайты лучше собирать из них, а новый цвет добавлять сразу тремя оттенками.</p>
+    <div id="pal"></div>
+  </section>
+
+  <div id="sections"></div>
+
+  <footer>Спрайты рисуются кодом из файла sprites.js в папке game на GitHub. Идеи хранятся вместе со страницей и видны всем, у кого есть к ней доступ.</footer>
+</div>
+
+<script src="sprites.js"></script>
+<script>
+(() => {
+'use strict';
+const S = window.OgorodSprites, {T, C, CROPS} = S;
+const $ = s => document.querySelector(s);
+const KEYS = Object.keys(CROPS);
+let zoom = 4, bgMode = 'grass';
+try { zoom = +(localStorage.getItem('artbible-zoom') || 4) || 4; bgMode = localStorage.getItem('artbible-bg') || 'grass'; } catch (e) {}
+
+/* a canvas of w×h tiles-in-pixels, drawn by fn(g) */
+function sprite(w, h, fn) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false; fn(g);
+  c.dataset.w = w; c.dataset.h = h; sizeCanvas(c);
+  return c;
+}
+function sizeCanvas(c) { c.style.width = c.dataset.w * zoom + 'px'; c.style.height = c.dataset.h * zoom + 'px'; }
+const fig = (canvas, cap) => { const f = document.createElement('figure'); f.append(canvas); if (cap) { const fc = document.createElement('figcaption'); fc.textContent = cap; f.append(fc); } return f; };
+const nofence = () => false;
+
+/* ---------- catalogue ---------- */
+const STAGES = ['семя', 'росток', 'куст', 'урожай'];
+const SECTIONS = [
+  {id:'characters', title:'Персонажи', desc:'Герой и жители деревни. Пока их двое: Тёма и тётя Галя.', items:[
+    {id:'tema', name:'Тёма', meta:'16 × 16 · 4 направления × 2 кадра ходьбы', wide:true, figs:() =>
+      ['down', 'left', 'right', 'up'].flatMap(f => [0, 1].map(fr => fig(sprite(16, 16, g => S.drawPlayer(g, 0, 1, f, fr)), {down:'вниз', left:'влево', right:'вправо', up:'вверх'}[f] + ' ' + (fr + 1))))},
+    {id:'galya', name:'Тётя Галя', meta:'12 × 18 · пока нарисована как часть рынка', figs:() => {
+      const full = sprite(80, 48, g => S.drawMarket(g, 0, 0));
+      return [fig(sprite(14, 18, g => g.drawImage(full, 33, 14, 14, 18, 0, 0, 14, 18)), 'за прилавком')];
+    }}
+  ]},
+  {id:'plants', title:'Растения', desc:'Каждая культура растёт в четыре стадии. Яблоня выше остальных и после первого урожая остаётся деревом.', items:
+    KEYS.map(k => ({id:k, name:CROPS[k].name, meta:`16 × ${k === 'apple' ? 24 : 16} · растёт ${CROPS[k].grow} дн.` + (CROPS[k].regrow ? `, плодоносит каждые ${CROPS[k].regrow} дн.` : ''), wide:true,
+      figs:() => [0, 1, 2, 3].map(st => fig(sprite(16, k === 'apple' ? 24 : 16, g => { if (k !== 'apple') S.drawSoil(g, 0, 0, false); S.drawCrop(g, 0, k === 'apple' ? 8 : 0, k, st); }), STAGES[st] + (k === 'apple' && st === 2 ? ' / дерево' : '')))}))
+  },
+  {id:'items', title:'Предметы', desc:'Иконки в поясе инструментов и на рынке. Рисуются в клетке 16 × 16, в игре показываются вдвое крупнее.', items:[
+    {id:'tools', name:'Инструменты', meta:'16 × 16', figs:() => [fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('hoe'), 0, 0)), 'мотыга'), fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('can'), 0, 0)), 'лейка')]},
+    {id:'seeds', name:'Семена и саженцы', meta:'16 × 16 · пакетик с цветной полосой', wide:true, figs:() => KEYS.map(k => fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('seed', k), 0, 0)), CROPS[k].name.toLowerCase()))},
+    {id:'produce', name:'Урожай', meta:'16 × 16', wide:true, figs:() => KEYS.map(k => fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('prod', k), 0, 0)), CROPS[k].product.toLowerCase()))},
+    {id:'upgrades', name:'Улучшения', meta:'16 × 16 · иконки в лавке', figs:() => [fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('field'), 0, 0)), 'участок'), fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('house'), 0, 0)), 'ремонт')]}
+  ]},
+  {id:'objects', title:'Постройки и объекты', desc:'Всё, что стоит на карте и мешает пройти: дом, рынок, колодец, деревья, кусты, забор.', items:[
+    {id:'house', name:'Дедушкин дом', meta:'64 × 48 · до и после ремонта', wide:true, figs:() => [fig(sprite(64, 48, g => S.drawHouse(g, false, 0, 0)), 'старый'), fig(sprite(64, 48, g => S.drawHouse(g, true, 0, 0)), 'после ремонта')]},
+    {id:'market', name:'Рынок тёти Гали', meta:'80 × 48', wide:true, figs:() => [fig(sprite(80, 48, g => S.drawMarket(g, 0, 0)), '')]},
+    {id:'well', name:'Колодец', meta:'16 × 16', figs:() => [fig(sprite(16, 16, g => S.drawWell(g, 0, 0)), '')]},
+    {id:'tree', name:'Дерево и куст', meta:'16 × 16', figs:() => [fig(sprite(16, 16, g => S.drawTree(g, 0, 0)), 'дерево'), fig(sprite(16, 16, g => S.drawBush(g, 0, 0)), 'куст')]},
+    {id:'fence', name:'Забор', meta:'16 × 16 · соединяется с соседними секциями', wide:true, figs:() => {
+      const piece = (w, h, isF) => sprite(w * 16, h * 16, g => { for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) isF(x, y) ? S.drawFence(g, x, y, (a, b) => a >= 0 && b >= 0 && a < w && b < h && isF(a, b)) : S.drawGrass(g, x, y); });
+      return [fig(piece(1, 1, () => true), 'столбик'), fig(piece(3, 1, () => true), 'пролёт'), fig(piece(3, 3, (x, y) => x === 0 || y === 0), 'угол')];
+    }}
+  ]},
+  {id:'tiles', title:'Поверхности', desc:'Тайлы земли. Из них складывается карта: трава, цветы, тропинки, вода и всё, что бывает на огороде.', items:[
+    {id:'grass', name:'Трава и цветы', meta:'16 × 16 · узор случайный для каждой клетки', figs:() => [fig(sprite(32, 16, g => { S.drawGrass(g, 0, 0); S.drawGrass(g, 1, 0); }), 'трава'), fig(sprite(16, 16, g => S.drawFlowers(g, 0, 0)), 'цветы')]},
+    {id:'path', name:'Тропинка', meta:'16 × 16 · песок', figs:() => [fig(sprite(32, 16, g => { S.drawPath(g, 0, 0); S.drawPath(g, 1, 0); }), '')]},
+    {id:'water', name:'Вода', meta:'16 × 16 · рябь движется', figs:() => [fig(sprite(32, 16, g => { S.drawWater(g, 0, 0, 0, true); S.drawWater(g, 1, 0, 0, true); }), 'у берега'), fig(sprite(16, 16, g => S.drawWater(g, 0, 0, 0, false)), 'глубина')]},
+    {id:'farm', name:'Огород', meta:'16 × 16 · от заросшей земли до политой грядки', wide:true, figs:() => [
+      fig(sprite(16, 16, g => S.drawLocked(g, 0, 0)), 'камни'), fig(sprite(16, 16, g => S.drawLocked(g, 3, 1)), 'сорняки'), fig(sprite(16, 16, g => S.drawLocked(g, 2, 5)), 'пень'),
+      fig(sprite(16, 16, g => S.drawDirt(g, 0, 0)), 'расчищено'), fig(sprite(16, 16, g => { S.drawDirt(g, 0, 0); S.drawSoil(g, 0, 0, false); }), 'вскопано'), fig(sprite(16, 16, g => { S.drawDirt(g, 0, 0); S.drawSoil(g, 0, 0, true); }), 'полито')]}
+  ]},
+  {id:'ui', title:'Интерфейс', desc:'Панели, ячейки и шрифты в стиле Террарии: синие окна, золотые рамки, белый текст с тёмной тенью. Заголовки набраны пиксельным шрифтом Press Start 2P, остальной текст — Rubik.', items:[
+    {id:'ui-colors', name:'Цвета интерфейса', meta:'фон, панели, рамки, акценты', wide:true, figs:() => [['#0f1638', 'ночное небо'], ['#2c3c8c', 'панель'], ['#3d4fa8', 'ячейка'], ['#151b4a', 'рамка'], ['#ffd24a', 'золото'], ['#2f9e3a', 'кнопка']].map(([c, n]) => fig(sprite(8, 8, g => { g.fillStyle = c; g.fillRect(0, 0, 8, 8); }), n))},
+    {id:'ui-slot', name:'Ячейка пояса', meta:'выбранная обведена золотом', figs:() => {
+      const slot = sel => { const c = sprite(22, 22, g => { g.fillStyle = '#151b4a'; g.fillRect(0, 0, 22, 22); g.fillStyle = sel ? '#ffd24a' : '#151b4a'; g.fillRect(0, 0, 22, 22); g.fillStyle = sel ? '#3d4fa8' : '#2c3c8c'; g.fillRect(1, 1, 20, 20); g.drawImage(S.iconCanvas('can'), 3, 3); }); return c; };
+      return [fig(slot(false), 'обычная'), fig(slot(true), 'выбрана')];
+    }}
+  ]},
+  {id:'effects', title:'Эффекты и освещение', desc:'Короткие вспышки частиц при действиях и смена дня и ночи.', items:[
+    {id:'particles', name:'Частицы', meta:'2 × 2 пикселя, живут полсекунды', figs:() => [['#6e4a30', 'копка'], ['#6a98f4', 'полив'], ['#4a2c16', 'посадка'], ['#e8832a', 'урожай']].map(([c, n]) => fig(sprite(16, 16, g => { S.drawGrass(g, 0, 0); g.fillStyle = c; [[4, 5], [9, 3], [12, 7], [6, 9], [10, 11], [3, 12]].forEach(([x, y]) => g.fillRect(x, y, 2, 2)); }), n))},
+    {id:'night', name:'Время суток', meta:'после 18:00 мир постепенно темнеет', wide:true, figs:() => [0, .2, .35, .5].map((a, i) => fig(sprite(32, 16, g => { S.drawGrass(g, 0, 0); S.drawTree(g, 1, 0); S.drawPlayer(g, 0, 0, 'down', 0); g.fillStyle = `rgba(18,22,60,${a})`; g.fillRect(0, 0, 32, 16); }), ['день', '19:00', '20:00', '22:00'][i]))}
+  ]}
+];
+
+/* ---------- palette ---------- */
+const PAL = [
+  ['Трава', [['grassL', 'светлая'], ['grass', 'основная'], ['grassD', 'тёмная']]],
+  ['Земля', [['farmL', 'светлая'], ['farm', 'расчищенная'], ['farmD', 'тёмная'], ['soil', 'грядка'], ['soilD', 'борозда'], ['soilW', 'политая'], ['soilWD', 'политая, борозда']]],
+  ['Песок', [['pathL', 'светлый'], ['path', 'тропинка'], ['pathD', 'тёмный']]],
+  ['Вода', [['waterL', 'блик'], ['water', 'вода'], ['waterD', 'у берега']]],
+  ['Дерево', [['fenceL', 'светлое'], ['fence', 'доски'], ['fenceD', 'тёмное'], ['trunk', 'ствол'], ['trunkD', 'ствол, тень']]],
+  ['Листва', [['leafL', 'светлая'], ['leaf', 'основная'], ['leafD', 'тёмная']]],
+  ['Камень', [['stoneL', 'светлый'], ['stone', 'камень'], ['stoneD', 'тёмный']]],
+  ['Акценты', [['coin', 'монеты'], ['ink', 'глаза, контуры']]]
+];
+function buildPalette() {
+  const root = $('#pal'); let n = 0;
+  PAL.forEach(([group, list]) => {
+    const h = document.createElement('div'); h.className = 'pal-group'; h.textContent = group; root.append(h);
+    const box = document.createElement('div'); box.className = 'pal';
+    list.forEach(([key, name]) => {
+      if (!C[key]) return; n++;
+      const sw = document.createElement('div'); sw.className = 'sw';
+      sw.innerHTML = `<i style="background:${C[key]}"></i><div><div class="nm"></div><code>${C[key]}</code></div>`;
+      sw.querySelector('.nm').textContent = name;
+      box.append(sw);
+    });
+    root.append(box);
+  });
+  $('#palCount').textContent = n + ' цветов';
+}
+
+/* ---------- sections ---------- */
+const PRIO = {p1:'обязательно', p2:'хорошо бы', p3:'когда-нибудь'};
+const STATUS = {new:'новая', work:'в работе', done:'готово'};
+const sectionEls = {};
+function buildSections() {
+  const root = $('#sections'), nav = $('#nav');
+  [['rules', 'Правила'], ['palette', 'Палитра']].forEach(([id, t]) => { const a = document.createElement('a'); a.href = '#' + id; a.textContent = t; nav.append(a); });
+  SECTIONS.forEach(sec => {
+    const a = document.createElement('a'); a.href = '#' + sec.id; a.innerHTML = '<span></span><span class="n"></span>'; a.firstChild.textContent = sec.title; nav.append(a);
+    const el = document.createElement('section'); el.id = sec.id;
+    el.innerHTML = `<div class="sec-head"><h2></h2><span class="count"></span></div><p class="sec-desc"></p><div class="grid"></div>
+      <div class="ideas"><div class="ideas-head"><h3>Идеи для раздела</h3><span class="hint">Опишите, что добавить или поменять. Можно указать конкретный спрайт.</span></div>
+      <div class="idea-list"><p class="empty">Загружаю идеи…</p></div>
+      <form class="add" hidden><textarea id="idea-${sec.id}" placeholder="Например: у Тёмы должна быть соломенная шляпа с красной лентой" aria-label="Новая идея для раздела «${sec.title}»"></textarea>
+      <div class="row"><select id="sprite-${sec.id}" aria-label="К какому спрайту"><option value="">Весь раздел</option></select>
+      <select id="prio-${sec.id}" aria-label="Важность"><option value="p1">Обязательно</option><option value="p2" selected>Хорошо бы</option><option value="p3">Когда-нибудь</option></select>
+      <button class="btn" type="submit">Добавить идею</button><span class="status" role="status"></span></div></form></div>`;
+    el.querySelector('h2').textContent = sec.title;
+    el.querySelector('.count').textContent = sec.items.length + ' ' + plural(sec.items.length, 'спрайт', 'спрайта', 'спрайтов');
+    el.querySelector('.sec-desc').textContent = sec.desc;
+    const grid = el.querySelector('.grid'), sel = el.querySelector(`#sprite-${sec.id}`);
+    sec.items.forEach(it => {
+      const card = document.createElement('div'); card.className = 'card' + (it.wide ? ' wide' : ''); card.id = 'sp-' + it.id;
+      const box = document.createElement('div'); box.className = 'stagebox'; box.append(...it.figs());
+      const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = it.name;
+      const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = it.meta;
+      card.append(box, nm, meta); grid.append(card);
+      const o = document.createElement('option'); o.value = it.id; o.textContent = it.name; sel.append(o);
+    });
+    root.append(el);
+    sectionEls[sec.id] = {el, navCount:a.querySelector('.n'), list:el.querySelector('.idea-list'), form:el.querySelector('form'), status:el.querySelector('.status')};
+  });
+}
+function plural(n, a, b, c) { const m = n % 100, d = n % 10; if (m > 10 && m < 20) return c; if (d === 1) return a; if (d > 1 && d < 5) return b; return c; }
+
+function applyView() {
+  document.body.classList.remove('bg-grass', 'bg-check', 'bg-dark'); document.body.classList.add('bg-' + bgMode);
+  document.querySelectorAll('.stagebox canvas').forEach(sizeCanvas);
+  document.querySelectorAll('#zoomSeg button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.z === zoom)));
+  document.querySelectorAll('#bgSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.bg === bgMode)));
+}
+$('#zoomSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; zoom = +b.dataset.z; try { localStorage.setItem('artbible-zoom', zoom); } catch (x) {} applyView(); });
+$('#bgSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; bgMode = b.dataset.bg; try { localStorage.setItem('artbible-bg', bgMode); } catch (x) {} applyView(); });
+
+function drawScene() {
+  const c = $('#scene'), g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  for (let y = 0; y < 5; y++) for (let x = 0; x < 12; x++) {
+    if (x === 2 && y >= 3) S.drawPath(g, x, y);
+    else if (x >= 6 && x <= 10 && y >= 2) S.drawDirt(g, x, y);
+    else if (y === 1 && x >= 6) S.drawFence(g, x, y, (a, b) => b === 1 && a >= 6 && a < 12);
+    else if ((x + y) % 5 === 1) S.drawFlowers(g, x, y);
+    else S.drawGrass(g, x, y);
+  }
+  S.drawHouse(g, true, 0, 0);
+  const crops = [['carrot', 3], ['potato', 2], ['strawberry', 3], ['tomato', 1], ['pumpkin', 3]];
+  crops.forEach(([k, st], i) => { S.drawSoil(g, (6 + i) * T, 2 * T, i % 2 === 0); S.drawCrop(g, (6 + i) * T, 2 * T, k, st); });
+  for (let i = 0; i < 5; i++) { S.drawSoil(g, (6 + i) * T, 3 * T, true); S.drawCrop(g, (6 + i) * T, 3 * T, KEYS[i], i % 3); }
+  S.drawCrop(g, 11 * T, 3 * T, 'apple', 3);
+  S.drawPlayer(g, 5 * T, 3 * T, 'right', 0);
+}
+
+/* ---------- ideas (shared store) ---------- */
+let db = null, ideas = [], canWrite = true;
+function renderIdeas() {
+  SECTIONS.forEach(sec => {
+    const s = sectionEls[sec.id], mine = ideas.filter(d => d.section === sec.id);
+    const open = mine.filter(d => d.status !== 'done').length;
+    s.navCount.textContent = open ? open : '';
+    s.list.replaceChildren();
+    if (!mine.length) {
+      const p = document.createElement('p'); p.className = 'empty';
+      p.textContent = db ? 'Пока пусто. Запишите первую идею для этого раздела ниже.' : 'Идеи сохраняются только когда страница открыта на claude.ai.';
+      s.list.append(p); return;
+    }
+    const order = {new:0, work:1, done:2};
+    mine.sort((a, b) => (order[a.status] ?? 0) - (order[b.status] ?? 0) || (a.priority || 'p2').localeCompare(b.priority || 'p2') || (b.createdAt || 0) - (a.createdAt || 0));
+    mine.forEach(d => {
+      const row = document.createElement('div'); row.className = 'idea' + (d.status === 'done' ? ' done' : '');
+      const main = document.createElement('div');
+      const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = d.text || '';
+      const tags = document.createElement('div'); tags.className = 'tags';
+      const it = sec.items.find(x => x.id === d.sprite);
+      const add = (t, cls) => { const s2 = document.createElement('span'); s2.className = 'tag ' + (cls || ''); s2.textContent = t; tags.append(s2); };
+      add(it ? it.name : 'весь раздел');
+      add(PRIO[d.priority] || PRIO.p2, d.priority === 'p1' ? 'p1' : '');
+      add(STATUS[d.status] || STATUS.new, d.status === 'work' ? 'st-work' : d.status === 'done' ? 'st-done' : '');
+      main.append(txt, tags);
+      const acts = document.createElement('div'); acts.className = 'acts';
+      if (canWrite) {
+        const next = {new:'work', work:'done', done:'new'}[d.status || 'new'];
+        const b1 = document.createElement('button'); b1.type = 'button'; b1.className = 'btn ghost'; b1.textContent = {work:'В работу', done:'Готово', new:'Вернуть'}[next];
+        b1.addEventListener('click', () => write(() => db.doc('ideas/' + d.id).update({status:next}), s));
+        const b2 = document.createElement('button'); b2.type = 'button'; b2.className = 'btn ghost'; b2.textContent = 'Удалить'; b2.setAttribute('aria-label', 'Удалить идею');
+        let armed = false;
+        b2.addEventListener('click', () => {
+          if (!armed) { armed = true; b2.textContent = 'Точно?'; setTimeout(() => { armed = false; b2.textContent = 'Удалить'; }, 3000); return; }
+          write(() => db.doc('ideas/' + d.id).delete(), s);
+        });
+        acts.append(b1, b2);
+      }
+      row.append(main, acts); s.list.append(row);
+    });
+  });
+}
+async function write(fn, s) {
+  try { await fn(); s.status.textContent = ''; s.status.classList.remove('err'); }
+  catch (e) {
+    s.status.classList.add('err');
+    s.status.textContent = e && e.code === 'quota_exceeded' ? 'Хранилище заполнено. Удалите старые идеи.' : 'Не удалось сохранить. Попробуйте ещё раз.';
+    if (e && e.code === 'invalid_argument') { canWrite = false; setForms(); renderIdeas(); }
+  }
+}
+function setForms() { SECTIONS.forEach(sec => { sectionEls[sec.id].form.hidden = !(db && canWrite); }); }
+function wireForms() {
+  SECTIONS.forEach(sec => {
+    const s = sectionEls[sec.id];
+    s.form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const ta = s.form.querySelector('textarea'), text = ta.value.trim();
+      if (!text) { s.status.textContent = 'Сначала напишите идею.'; return; }
+      const btn = s.form.querySelector('button'); btn.disabled = true;
+      await write(async () => {
+        const ref = db.collection('ideas').doc();
+        await ref.set({section:sec.id, sprite:s.form.querySelector('#sprite-' + sec.id).value, priority:s.form.querySelector('#prio-' + sec.id).value, status:'new', text:text.slice(0, 2000), createdAt:Date.now()});
+        ta.value = ''; s.status.textContent = 'Идея сохранена.';
+      }, s);
+      btn.disabled = false;
+    });
+  });
+}
+async function connect() {
+  if (!window.claude || !window.claude.use) { renderIdeas(); return; }
+  try { db = await window.claude.use('db'); } catch (e) { db = null; }
+  if (!db) { renderIdeas(); return; }
+  try { const user = await window.claude.use('user'); const w = user ? await user.can('data.write') : null; if (w === false) canWrite = false; } catch (e) {}
+  setForms();
+  db.collection('ideas').onSnapshot(snap => {
+    ideas = snap.docs.map(d => ({id:d.id, ...d.data()}));
+    renderIdeas();
+  }, () => { SECTIONS.forEach(sec => { const s = sectionEls[sec.id]; s.status.classList.add('err'); s.status.textContent = 'Связь с хранилищем потеряна. Обновите страницу.'; }); });
+}
+
+buildPalette(); buildSections(); wireForms(); applyView(); drawScene(); renderIdeas();
+if (location.hash) { const t = document.getElementById(location.hash.slice(1)); if (t) setTimeout(() => t.scrollIntoView(), 50); }
+connect();
+})();
+</script>
