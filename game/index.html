@@ -98,6 +98,9 @@ body{font-family:var(--f-ui);font-size:15px;line-height:1.4}
 .eq canvas{width:32px;height:32px;image-rendering:pixelated}
 .eqn{font-size:14px;font-weight:500}
 .eqv{font-size:12px;color:var(--muted)}
+.adm{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.adm input,.adm select{font:inherit;font-size:15px;background:var(--sky);color:var(--text);border:2px solid var(--edge);border-radius:6px;padding:5px 8px}
+.adm input[type=number]{width:80px}
 .inv{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
 .cell{position:relative;font:inherit;font-size:13px;color:var(--text);background:var(--panel-2);border:2px solid var(--edge);border-radius:6px;padding:8px 4px 6px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;text-shadow:1px 1px 0 #000;min-width:0}
 .cell:disabled{cursor:default;opacity:1}
@@ -488,7 +491,7 @@ function update(dt) {
     else if (fade.dir < 0 && fade.a <= 0) { fade.a = 0; fade.dir = 0; }
     return;
   }
-  state.min += dt * 4;
+  if (!timeFrozen) state.min += dt * 4;
   collectDrops(dt);
   if (state.min >= 1380 && !state.lateWarned) { state.lateWarned = true; toast(state.loc === 'farm' ? 'Уже 23:00. Пора домой спать.' : 'Уже 23:00. Пора возвращаться домой.'); }
   if (state.min >= 1440) { newDay('Тёма так заработался, что уснул прямо на улице. Соседи проводили его до дома.'); return; }
@@ -747,7 +750,7 @@ const HOW = `
     <li>Чтобы лечь спать и начать новый день, подойдите к двери дома.</li>
   </ol>
   <h3>Управление</h3>
-  <p class="small"><b>Клавиатура:</b> стрелки или WASD — ходить, Пробел или E — действие, I — инвентарь, 1–9, 0, − и = — выбрать предмет.<br>
+  <p class="small"><b>Клавиатура:</b> стрелки или WASD — ходить, Пробел или E — действие, I — инвентарь, H — админ-панель для тестов, 1–9, 0, − и = — выбрать предмет.<br>
   <b>Мышь и телефон:</b> нажмите на клетку — Тёма сам дойдёт и сделает действие выбранным предметом. Для точного управления на телефоне есть крестовина.</p>`;
 
 function openIntro() {
@@ -911,6 +914,49 @@ function openMail() {
     <div class="btns"><button class="btn alt" data-close data-focus>Закрыть</button></div>`);
 }
 
+/* ---------- admin panel (H): for testing ---------- */
+/* Season and day jump straight there: nothing grows or withers on the way. Frozen time is not saved */
+let timeFrozen = false;
+function openAdmin() {
+  const s = season(), hh = Math.floor(state.min / 60), mm = Math.floor(state.min % 60 / 10) * 10;
+  const opt = (v, t, sel) => `<option value="${v}"${sel ? ' selected' : ''}>${t}</option>`;
+  const items = [...KEYS.map(k => opt('seed:' + k, 'Семена: ' + CROPS[k].name)), ...KEYS.map(k => opt('prod:' + k, 'Урожай: ' + CROPS[k].product)), ...Object.keys(RES).map(r => opt('res:' + r, 'Материал: ' + RES[r].name))].join('');
+  openPanel(`<h2>Админ-панель</h2>
+    <p class="small">Для тестирования. При переключении сезона и дня растения не растут и не увядают.</p>
+    <h3>Сезон</h3>
+    <div class="btns">${['spring', 'summer', 'autumn', 'winter'].map((id, i) => `<button class="btn ${s.id === id ? '' : 'alt'} sm" data-season="${i}">${['Весна', 'Лето', 'Осень', 'Зима'][i]}</button>`).join('')}</div>
+    <h3>День сезона</h3>
+    <div class="adm"><input id="admDay" type="number" min="1" max="${SEASON_DAYS}" value="${s.d}" aria-label="День сезона"><button class="btn sm" data-act="day">Установить</button><span class="small">сейчас ${s.d} из ${SEASON_DAYS}, всего дней с начала игры: ${state.day}</span></div>
+    <h3>Время</h3>
+    <div class="adm"><select id="admH" aria-label="Часы">${Array.from({length:18}, (_, i) => opt(i + 6, i + 6, i + 6 === hh)).join('')}</select> :
+      <select id="admM" aria-label="Минуты">${[0, 10, 20, 30, 40, 50].map(m => opt(m, String(m).padStart(2, '0'), m === mm)).join('')}</select>
+      <button class="btn sm" data-act="time">Установить</button>
+      <button class="btn ${timeFrozen ? '' : 'alt'} sm" data-act="freeze">${timeFrozen ? 'Запустить время' : 'Остановить время'}</button></div>
+    <div class="btns">${[[360, '6:00'], [720, '12:00'], [1080, '18:00'], [1320, '22:00']].map(([m, t]) => `<button class="btn alt sm" data-min="${m}">${t}</button>`).join('')}</div>
+    <h3>Добавить в инвентарь</h3>
+    <div class="adm"><select id="admItem" aria-label="Предмет">${items}</select><input id="admCount" type="number" min="1" max="999" value="10" aria-label="Количество"><button class="btn sm" data-act="give">Добавить</button></div>
+    <div class="btns"><button class="btn alt" data-close data-focus>Закрыть (H)</button></div>`, b => {
+    const ds = b.dataset;
+    if (ds.season !== undefined) setDay(Math.floor((state.day - 1) / (SEASON_DAYS * 4)) * SEASON_DAYS * 4 + +ds.season * SEASON_DAYS + season().d);
+    if (ds.act === 'day') { const d = Math.max(1, Math.min(SEASON_DAYS, +$('#admDay').value || 1)); setDay(state.day - season().d + d); }
+    if (ds.act === 'time') { const h = +$('#admH').value, m = +$('#admM').value; state.min = Math.max(360, Math.min(1430, h * 60 + m)); state.lateWarned = state.min >= 1380; }
+    if (ds.min) { state.min = +ds.min; state.lateWarned = state.min >= 1380; }
+    if (ds.act === 'freeze') timeFrozen = !timeFrozen;
+    if (ds.act === 'give') {
+      const [kind, k] = $('#admItem').value.split(':'), n = Math.max(1, Math.min(999, Math.round(+$('#admCount').value || 1)));
+      if (kind === 'seed') state.seeds[k] += n; else if (kind === 'prod') state.produce[k] += n; else state.res[k] += n;
+      toast('Добавлено: ' + n);
+    }
+    save(); hud(); openAdmin();
+  });
+  panel.dataset.kind = 'admin';
+}
+function setDay(day) {
+  state.day = Math.max(1, day);
+  if (season().id !== 'winter') { state.snowCover = false; state.snowTrod = {}; }
+  buildMap(); refreshLook();
+}
+
 /* the inventory: equipment on the left, everything Тёма carries on the right. Tap a tool or seeds to take them in hand */
 function openInventory() {
   const cell = (i, icon, name, n, extra = '') => `<button class="cell${state.tool === i ? ' on' : ''}" ${i >= 0 ? `data-take="${i}"` : 'disabled'} type="button">
@@ -985,7 +1031,7 @@ function hud() {
   setText(els.locName, loc().name);
   { const s = season(); setText(els.day, s.name + ', день ' + s.d + ' из ' + SEASON_DAYS); }
   setText(els.clock, clockText());
-  setText(els.part, state.min < 720 ? 'утро' : state.min < 1080 ? 'день' : state.min < 1320 ? 'вечер' : 'ночь');
+  setText(els.part, timeFrozen ? 'пауза' : state.min < 720 ? 'утро' : state.min < 1080 ? 'день' : state.min < 1320 ? 'вечер' : 'ночь');
   setText(els.money, String(state.money));
   setText(els.water, state.water + '/' + state.cap);
   setText(els.basket, String(KEYS.reduce((s, k) => s + state.produce[k], 0)));
@@ -1128,10 +1174,11 @@ const SLOT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', '
 const KEYDIR = {ArrowUp:'up', KeyW:'up', ArrowDown:'down', KeyS:'down', ArrowLeft:'left', KeyA:'left', ArrowRight:'right', KeyD:'right'};
 function frontAct() { if (panelOpen || player.moving) return; const [x, y] = front(); act(x, y); }
 window.addEventListener('keydown', e => {
-  if (panelOpen) { if ((e.code === 'Escape' || (e.code === 'KeyI' && panel.dataset.kind === 'bag')) && panelClosable) closePanel(); return; }
+  if (panelOpen) { if ((e.code === 'Escape' || ((e.code === 'KeyI' && panel.dataset.kind === 'bag') || (e.code === 'KeyH' && panel.dataset.kind === 'admin' && !/INPUT|SELECT/.test(document.activeElement.tagName)))) && panelClosable) closePanel(); return; }
   const d = KEYDIR[e.code];
   if (d) { e.preventDefault(); ensureAudio(); if (!held.includes(d)) held.push(d); return; }
   if (e.code === 'KeyI') { e.preventDefault(); openInventory(); return; }
+  if (e.code === 'KeyH') { e.preventDefault(); openAdmin(); return; }
   if (e.code === 'Space' || e.code === 'KeyE') { e.preventDefault(); if (!e.repeat) frontAct(); return; }
   const slot = SLOT_KEYS.indexOf(e.code.replace('Numpad', 'Digit'));
   if (slot >= 0 && slot < beltItems.length) { state.tool = beltItems[slot]; hud(); }
