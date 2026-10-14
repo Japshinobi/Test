@@ -842,7 +842,7 @@ function sprite(kind, a, b, look = SUMMER) {
     case 'stall':     return cached('stall' + a + b + (look.snow ? 's' : ''), 64, 48, 0, 48, g => { drawStall(g, a, b); sn(g); });
     case 'stallside': return cached('stallside' + a + b + (look.snow ? 's' : ''), 48, 64, 0, 64, g => { drawStallSide(g, a, b); sn(g); });
     case 'stallback': return cached('stallback' + (look.snow ? 's' : ''), 64, 40, 0, 40, g => { drawStallBack(g); sn(g); });
-    case 'tent':      return cached('tent' + b + (look.snow ? 's' : ''), 64, 64, 0, 64, g => { drawTent(g, b); sn(g); });
+    case 'tent': { const o = cached('tent' + b + (look.snow ? 's' : ''), 64, 64, 0, 64, g => { drawTent(g, b); sn(g); }); o.shadow = tentShadow; return o; }
     case 'fountain': {
       /* the basin stands on the ground, so its shadow starts at the widest line of the oval, not at the front wall */
       const o = cached('fountain' + (look.snow ? 's' : ''), 48, 56, 0, 56, g => { drawFountain(g); sn(g); });
@@ -907,6 +907,21 @@ function fountainShadow(g, o, px, py, sun) {
     const w = i > 17 ? 9 : 3;
     g.fillRect(Math.round(X + cx - w + sun.shear * i), Math.round(Y + cy + sun.len * i), w * 2, 1);
   }
+}
+/* shadow of a solid with a footprint on the ground: every horizontal slice of it, from the ground up,
+   is laid on the ground shifted away from the sun by its height. Walls keep the footprint up to wallH,
+   then the roof narrows to its ridge (ridge: 0 for a point, or a width) by peakH */
+function volumeShadow(g, X, Y, f, wallH, peakH, ridge, sun) {
+  g.fillStyle = '#06102a';
+  const cx = (f.x0 + f.x1) / 2, cy = (f.y0 + f.y1) / 2, hw = (f.x1 - f.x0) / 2, hd = (f.y1 - f.y0) / 2;
+  for (let h = 0; h <= peakH; h++) {
+    const k = h <= wallH ? 1 : 1 - (h - wallH) / (peakH - wallH);
+    const w = Math.max(ridge / 2, hw * k), d = hd * k;
+    g.fillRect(Math.round(X + cx - w + sun.shear * h), Math.round(Y + cy - d + sun.len * h), Math.max(1, Math.round(w * 2)), Math.max(1, Math.round(d * 2)));
+  }
+}
+function tentShadow(g, o, px, py, sun) {
+  volumeShadow(g, px - o.ax, py - o.ay, {x0:4, x1:60, y0:38, y1:62}, 22, 50, 2, sun);
 }
 function castShadow(g, o, px, py, sun) {
   if (o.shadow) return o.shadow(g, o, px, py, sun);
