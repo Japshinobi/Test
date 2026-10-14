@@ -1,6 +1,7 @@
 /* Дедушкин огород: все спрайты игры.
    Общий файл для игры (index.html) и каталога графики (catalog.html).
-   Клетка 16x16 пикселей; каждая функция рисует пиксели прямоугольниками. */
+   Черновая клетка 16x16 пикселей (в игре растягивается до 32x32); каждая функция рисует пиксели прямоугольниками.
+   Объекты (деревья, постройки, растения, персонаж) могут выходить за свою клетку вверх и в стороны. */
 window.OgorodSprites = (() => {
 'use strict';
 const T = 16;
@@ -72,28 +73,37 @@ function drawFence(g, x, y, is) {
   if (is(x, y + 1)) P(7, 12, 2, 4, C.fence);
   P(5, 3, 6, 11, C.fence); P(5, 3, 6, 1, C.fenceL); P(5, 13, 6, 1, C.fenceD); P(10, 4, 1, 9, C.fenceD);
 }
-function drawTree(g, x, y) {
-  drawGrass(g, x, y);
-  const P = painter(g, x * T, y * T);
-  P(3, 13, 10, 2, 'rgba(0,0,0,.18)');
-  P(6, 10, 4, 6, C.trunk); P(6, 10, 1, 6, C.trunkD);
-  P(2, 2, 12, 9, C.leaf); P(1, 4, 14, 5, C.leaf); P(4, 1, 8, 1, C.leaf);
-  P(4, 3, 4, 2, C.leafL); P(3, 5, 2, 2, C.leafL); P(2, 9, 12, 2, C.leafD);
+function drawTree(g, v = 0) {
+  const P = painter(g, 0, 0);
+  if (v === 1) {
+    P(14, 23, 4, 17, C.trunk); P(14, 23, 1, 17, C.trunkD); P(12, 38, 8, 2, C.trunk);
+    P(8, 3, 16, 20, C.leaf); P(6, 8, 20, 12, C.leaf); P(11, 1, 10, 2, C.leaf); P(10, 23, 12, 2, C.leaf);
+    P(6, 18, 20, 2, C.leafD); P(21, 6, 4, 13, C.leafD); P(10, 24, 12, 1, C.leafD);
+    P(10, 4, 5, 3, C.leafL); P(8, 9, 4, 4, C.leafL); P(14, 7, 3, 2, C.leafL);
+    P(16, 12, 2, 1, C.leafD); P(11, 15, 2, 1, C.leafD); P(18, 9, 1, 2, C.leafD);
+    return;
+  }
+  P(13, 27, 6, 13, C.trunk); P(13, 27, 2, 13, C.trunkD); P(11, 38, 10, 2, C.trunk); P(11, 38, 2, 2, C.trunkD);
+  P(5, 8, 22, 15, C.leaf); P(3, 11, 26, 9, C.leaf); P(8, 4, 16, 5, C.leaf); P(11, 2, 10, 2, C.leaf);
+  P(7, 22, 18, 4, C.leaf); P(10, 26, 12, 2, C.leaf);
+  P(3, 18, 26, 2, C.leafD); P(7, 24, 18, 2, C.leafD); P(24, 10, 4, 9, C.leafD); P(10, 27, 12, 1, C.leafD);
+  P(9, 5, 7, 3, C.leafL); P(6, 9, 6, 4, C.leafL); P(13, 8, 4, 2, C.leafL); P(5, 13, 3, 3, C.leafL);
+  P(15, 13, 2, 1, C.leafD); P(20, 8, 1, 2, C.leafD); P(11, 16, 2, 1, C.leafD); P(19, 19, 2, 1, C.leafD);
 }
-function drawBush(g, x, y) {
-  drawGrass(g, x, y);
-  const P = painter(g, x * T, y * T);
-  P(2, 6, 12, 8, C.leaf); P(3, 5, 10, 2, C.leafL); P(1, 8, 14, 4, C.leaf); P(3, 12, 10, 2, C.leafD);
-  P(5, 8, 1, 1, '#d63b45'); P(10, 9, 1, 1, '#d63b45'); P(7, 11, 1, 1, '#d63b45');
+function drawBush(g) {
+  const P = painter(g, 0, 0), r = '#d63b45';
+  P(3, 4, 14, 10, C.leaf); P(1, 6, 18, 7, C.leaf); P(5, 2, 10, 2, C.leaf);
+  P(6, 3, 5, 2, C.leafL); P(3, 6, 3, 2, C.leafL); P(2, 12, 16, 2, C.leafD); P(15, 6, 2, 6, C.leafD);
+  P(6, 7, 2, 2, r); P(12, 9, 2, 2, r); P(8, 11, 2, 2, r); P(6, 7, 1, 1, '#f07070'); P(12, 9, 1, 1, '#f07070');
 }
-function drawWell(g, x, y) {
-  drawGrass(g, x, y);
-  const P = painter(g, x * T, y * T);
-  P(2, 8, 12, 7, C.stone); P(2, 8, 12, 1, C.stoneL); P(4, 12, 2, 1, C.stoneD); P(9, 13, 3, 1, C.stoneD); P(7, 11, 2, 1, C.stoneD);
-  P(4, 9, 8, 2, '#2a4f78');
-  P(3, 2, 2, 7, C.trunk); P(11, 2, 2, 7, C.trunk);
-  P(1, 1, 14, 2, '#7a4a26'); P(2, 0, 12, 1, '#9a6a3a');
-  P(7, 3, 1, 4, '#d9c9a0'); P(6, 7, 3, 2, '#8b8b8b');
+function drawWell(g) {
+  const P = painter(g, 0, 0);
+  P(2, 4, 2, 15, C.trunk); P(12, 4, 2, 15, C.trunk); P(2, 4, 1, 15, C.trunkD);
+  P(0, 1, 16, 4, '#7a4a26'); P(2, 0, 12, 1, '#9a6a3a'); P(0, 4, 16, 1, '#5a3418');
+  P(4, 6, 8, 1, C.trunkD); P(7, 7, 1, 7, '#d9c9a0');
+  P(1, 18, 14, 10, C.stone); P(1, 18, 14, 2, C.stoneL); P(3, 19, 10, 2, '#2a4f78');
+  P(3, 23, 3, 1, C.stoneD); P(9, 25, 3, 1, C.stoneD); P(6, 22, 2, 1, C.stoneD); P(12, 22, 2, 1, C.stoneD); P(1, 27, 14, 1, C.stoneD);
+  P(6, 13, 4, 4, '#8b8b8b'); P(6, 13, 4, 1, '#b0b0b0');
 }
 function drawHouse(g, repaired, tx = 2, ty = 1) {
   const P = painter(g, tx * T, ty * T);
@@ -158,44 +168,52 @@ function cropStage(c) {
   return p < 0.3 ? 0 : p < 0.6 ? 1 : 2;
 }
 function drawCrop(g, X, Y, k, st) {
+  /* (X, Y) is the top-left of the crop's tile; tall plants grow above it and a little to the sides */
   const P = painter(g, X, Y), d = CROPS[k];
   if (k === 'apple') {
-    if (st === 0) { P(7, 7, 2, 8, C.trunk); P(5, 6, 3, 2, C.leafL); P(9, 5, 3, 2, C.leafL); return; }
-    if (st === 1) { P(7, 8, 2, 7, C.trunk); P(4, 1, 8, 8, C.leaf); P(5, 2, 3, 2, C.leafL); P(4, 7, 8, 2, C.leafD); return; }
-    P(3, 13, 10, 2, 'rgba(0,0,0,.2)');
-    P(6, 8, 4, 8, C.trunk); P(6, 8, 1, 8, C.trunkD);
-    P(1, -6, 14, 14, C.leaf); P(0, -3, 16, 8, C.leaf); P(3, -8, 10, 2, C.leaf);
-    P(3, -5, 4, 3, C.leafL); P(1, 5, 14, 3, C.leafD);
-    if (st === 3) [[3, -2], [9, -5], [11, 1], [5, 3], [7, -1]].forEach(([a, b]) => { P(a, b, 3, 3, d.color); P(a, b, 1, 1, '#f07070'); });
+    if (st === 0) { P(7, 6, 2, 10, C.trunk); P(5, 5, 3, 2, C.leafL); P(9, 3, 3, 2, C.leafL); P(8, 8, 3, 1, C.leaf); return; }
+    if (st === 1) {
+      P(7, 2, 2, 14, C.trunk); P(7, 2, 1, 14, C.trunkD);
+      P(2, -8, 12, 11, C.leaf); P(1, -5, 14, 6, C.leaf); P(4, -10, 8, 2, C.leaf);
+      P(4, -8, 4, 2, C.leafL); P(2, -4, 3, 2, C.leafL); P(2, 1, 12, 2, C.leafD); P(12, -6, 2, 6, C.leafD);
+      return;
+    }
+    P(6, -2, 4, 18, C.trunk); P(6, -2, 1, 18, C.trunkD); P(4, 14, 8, 2, C.trunk);
+    P(-4, -22, 24, 18, C.leaf); P(-6, -18, 28, 11, C.leaf); P(0, -25, 16, 3, C.leaf); P(-2, -5, 20, 3, C.leaf);
+    P(-6, -9, 28, 2, C.leafD); P(14, -20, 6, 12, C.leafD); P(0, -3, 16, 1, C.leafD);
+    P(0, -23, 8, 3, C.leafL); P(-4, -18, 5, 4, C.leafL); P(5, -19, 3, 2, C.leafL);
+    if (st === 3) [[-2, -14], [5, -20], [12, -12], [2, -8], [9, -16], [15, -7], [-4, -8]].forEach(([a, b]) => { P(a, b, 3, 3, d.color); P(a, b, 1, 1, '#f07070'); });
     return;
   }
   if (st === 0) { P(4, 9, 2, 2, '#4a2c16'); P(9, 8, 2, 2, '#4a2c16'); P(7, 11, 2, 1, '#4a2c16'); return; }
-  if (st === 1) { P(7, 8, 2, 5, C.leaf); P(5, 7, 2, 2, C.leafL); P(9, 7, 2, 2, C.leafL); return; }
+  if (st === 1) { P(7, 7, 2, 6, C.leaf); P(5, 6, 2, 2, C.leafL); P(9, 5, 2, 2, C.leafL); return; }
   if (st === 2) {
-    if (k === 'pumpkin') { P(1, 10, 14, 2, C.leaf); P(2, 7, 4, 3, C.leafL); P(10, 7, 4, 3, C.leafL); P(7, 9, 2, 2, '#f5c84a'); return; }
-    if (k === 'tomato') P(7, 2, 2, 12, '#a07a4a');
-    P(7, 6, 2, 7, C.leaf); P(4, 5, 3, 3, C.leafL); P(9, 4, 3, 3, C.leafL); P(4, 9, 3, 2, C.leaf); P(9, 8, 3, 2, C.leaf);
+    if (k === 'pumpkin') { P(0, 10, 16, 2, C.leaf); P(1, 6, 4, 4, C.leafL); P(11, 6, 4, 4, C.leafL); P(7, 8, 2, 2, '#f5c84a'); return; }
+    if (k === 'tomato') { P(7, -6, 2, 20, '#a07a4a'); P(4, -2, 8, 6, C.leaf); P(5, 4, 6, 6, C.leaf); P(3, 0, 3, 3, C.leafL); P(10, 3, 3, 3, C.leafL); return; }
+    P(7, 3, 2, 10, C.leaf); P(4, 2, 3, 3, C.leafL); P(9, 0, 3, 3, C.leafL); P(3, 7, 3, 2, C.leaf); P(10, 6, 3, 2, C.leaf);
     return;
   }
   if (k === 'carrot') {
-    P(5, 2, 2, 6, C.leaf); P(8, 1, 2, 7, C.leafL); P(10, 3, 2, 5, C.leaf);
-    P(5, 8, 6, 4, d.color); P(6, 12, 4, 2, '#d06a1c'); P(7, 14, 2, 1, '#d06a1c');
+    P(3, 1, 2, 6, C.leaf); P(5, -2, 2, 9, C.leaf); P(8, -4, 2, 11, C.leafL); P(10, -1, 2, 8, C.leaf); P(12, 2, 2, 5, C.leafL);
+    P(5, 7, 6, 5, d.color); P(5, 7, 6, 1, '#f6a85a'); P(6, 12, 4, 2, '#d06a1c'); P(7, 14, 2, 1, '#d06a1c');
   } else if (k === 'potato') {
-    P(3, 5, 10, 7, C.leaf); P(4, 4, 8, 2, C.leafL); P(5, 3, 2, 2, '#c9a6e8'); P(10, 5, 2, 2, '#f3f0ff');
-    P(2, 12, 4, 3, d.color); P(10, 12, 4, 3, d.color); P(6, 13, 3, 2, '#a87f4c');
+    P(2, 0, 12, 10, C.leaf); P(3, -2, 10, 2, C.leaf); P(4, -1, 4, 2, C.leafL); P(2, 8, 12, 2, C.leafD);
+    P(5, -3, 2, 2, '#c9a6e8'); P(10, 0, 2, 2, '#f3f0ff'); P(7, 3, 2, 2, '#c9a6e8');
+    P(1, 11, 4, 3, d.color); P(11, 11, 4, 3, d.color); P(6, 12, 3, 2, '#a87f4c');
   } else if (k === 'strawberry') {
-    P(2, 8, 12, 5, C.leaf); P(3, 7, 4, 2, C.leafL); P(9, 7, 4, 2, C.leafL);
-    [[3, 11], [9, 10], [6, 12]].forEach(([a, b]) => { P(a, b, 3, 3, d.color); P(a + 1, b + 1, 1, 1, '#f5d33b'); });
+    P(1, 7, 14, 6, C.leaf); P(3, 5, 4, 3, C.leafL); P(9, 5, 4, 3, C.leafL); P(1, 12, 14, 1, C.leafD);
+    [[3, 10], [9, 9], [6, 12], [12, 11]].forEach(([a, b]) => { P(a, b, 3, 3, d.color); P(a + 1, b + 1, 1, 1, '#f5d33b'); });
   } else if (k === 'tomato') {
-    P(7, 1, 2, 14, '#a07a4a'); P(4, 3, 8, 9, C.leaf); P(3, 6, 10, 4, C.leafL);
-    [[4, 5], [9, 7], [5, 10]].forEach(([a, b]) => { P(a, b, 3, 3, d.color); P(a, b, 1, 1, '#ff8a70'); });
+    P(7, -8, 2, 22, '#a07a4a');
+    P(3, -5, 10, 8, C.leaf); P(2, 2, 12, 8, C.leaf); P(4, -7, 8, 2, C.leaf);
+    P(3, -3, 3, 3, C.leafL); P(10, 4, 3, 3, C.leafL); P(2, 9, 12, 2, C.leafD);
+    [[4, -2], [9, 1], [3, 5], [10, 7], [6, 9]].forEach(([a, b]) => { P(a, b, 3, 3, d.color); P(a, b, 1, 1, '#ff8a70'); });
   } else if (k === 'pumpkin') {
-    P(1, 12, 14, 2, C.leaf); P(1, 6, 4, 3, C.leafL);
-    P(3, 6, 10, 8, d.color); P(2, 8, 12, 5, d.color);
-    P(5, 7, 1, 6, '#c46d10'); P(8, 6, 1, 8, '#c46d10'); P(11, 7, 1, 6, '#c46d10'); P(7, 4, 2, 3, '#5a7a2a');
+    P(0, 12, 16, 2, C.leaf); P(0, 5, 4, 4, C.leafL); P(12, 4, 4, 3, C.leafL);
+    P(2, 5, 12, 9, d.color); P(1, 7, 14, 6, d.color); P(3, 5, 4, 1, '#f5a94a');
+    P(5, 6, 1, 7, '#c46d10'); P(8, 5, 1, 9, '#c46d10'); P(11, 6, 1, 7, '#c46d10'); P(7, 2, 2, 4, '#5a7a2a'); P(2, 13, 12, 1, '#b85f0c');
   }
 }
-
 
 /* icons */
 function drawProduce(g, k, ox = 2, oy = 2) {
@@ -230,25 +248,127 @@ function iconCanvas(kind, k) {
 }
 
 
-/* player */
+/* player: 16 x 24, feet on the bottom row */
 function drawPlayer(g, X, Y, face, frame) {
-  const P = painter(g, X, Y - (frame ? 1 : 0));
-  const skin = '#f2c39b', hat = '#e3c069', band = '#9c6b2f', shirt = '#c0563a', over = '#3d5a8c', boot = '#4a2f1d', hair = '#7a4a22';
-  g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(X + 4, Y + 14, 8, 2);
-  const l = frame ? 1 : 0;
-  P(5, 13 - l, 2, 3, boot); P(9, 13 - (frame ? 0 : 1) + (frame ? 0 : 1), 2, 3, boot);
-  P(4, 9, 8, 4, shirt); P(5, 10, 6, 4, over); P(6, 9, 1, 1, over); P(9, 9, 1, 1, over);
-  if (face === 'left') { P(5, 10, 2, 3, skin); }
-  else if (face === 'right') { P(9, 10, 2, 3, skin); }
-  else { P(3, 10, 1, 3, skin); P(12, 10, 1, 3, skin); }
-  P(4, 4, 8, 5, skin);
-  if (face === 'up') P(4, 4, 8, 4, hair);
-  else if (face === 'down') { P(6, 6, 1, 2, C.ink); P(9, 6, 1, 2, C.ink); P(4, 4, 8, 1, hair); }
-  else if (face === 'left') { P(5, 6, 1, 2, C.ink); P(8, 4, 4, 3, hair); }
-  else { P(10, 6, 1, 2, C.ink); P(4, 4, 4, 3, hair); }
-  P(2, 3, 12, 2, hat); P(4, 1, 8, 2, hat); P(4, 3, 8, 1, band);
+  const P = painter(g, X, Y);
+  const skin = '#f2c39b', skinD = '#d9a27a', hat = '#e3c069', hatD = '#b8953f', band = '#9c6b2f';
+  const shirt = '#c0563a', shirtD = '#963f29', over = '#3d5a8c', overD = '#2b4168', boot = '#4a2f1d', hair = '#7a4a22';
+  const side = face === 'left' || face === 'right', step = frame ? 1 : 0;
+  /* legs and boots */
+  if (side) {
+    P(6, 18, 4, 4, over); P(6, 18, 1, 4, overD);
+    if (step) { P(4, 19, 3, 3, over); P(9, 19, 3, 3, overD); P(3, 22, 4, 2, boot); P(9, 22, 4, 2, boot); }
+    else P(5, 22, 6, 2, boot);
+  } else {
+    P(5, 18, 2, 4 - step, over); P(9, 18, 2, 4, over); P(9, 18, 1, 4, overD);
+    P(5, 22 - step, 2, 2, boot); P(9, 22, 2, 2, boot);
+  }
+  /* body */
+  P(4, 12, 8, 6, shirt); P(11, 12, 1, 6, shirtD); P(5, 13, 6, 5, over); P(5, 17, 6, 1, overD);
+  if (!side) { P(5, 12, 1, 1, over); P(10, 12, 1, 1, over); P(6, 15, 1, 1, '#f0bf45'); P(9, 15, 1, 1, '#f0bf45'); }
+  /* arms */
+  if (side) { const ax = face === 'left' ? 6 : 8; P(ax, 13, 2, 4, shirtD); P(ax, 17, 2, 1, skin); }
+  else { P(3, 12 + step, 1, 5, shirt); P(12, 12 - step + 1, 1, 4, shirtD); P(3, 17 + step, 1, 1, skin); P(12, 17, 1, 1, skin); }
+  /* head */
+  P(4, 5, 8, 7, skin); P(5, 11, 6, 1, skin);
+  if (face === 'up') { P(4, 5, 8, 6, hair); P(5, 11, 6, 1, skinD); }
+  else if (face === 'down') {
+    P(11, 6, 1, 5, skinD); P(4, 5, 1, 3, hair); P(11, 5, 1, 3, hair); P(5, 5, 6, 1, hair);
+    P(6, 8, 1, 2, C.ink); P(9, 8, 1, 2, C.ink); P(7, 10, 2, 1, '#b5655a'); P(5, 9, 1, 1, '#eaa48a'); P(10, 9, 1, 1, '#eaa48a');
+  } else if (face === 'left') {
+    P(8, 5, 4, 5, hair); P(3, 8, 1, 2, skin); P(5, 8, 1, 2, C.ink); P(5, 10, 2, 1, '#b5655a'); P(9, 8, 1, 2, skinD);
+  } else {
+    P(4, 5, 4, 5, hair); P(12, 8, 1, 2, skin); P(10, 8, 1, 2, C.ink); P(9, 10, 2, 1, '#b5655a'); P(6, 8, 1, 2, skinD);
+  }
+  /* straw hat */
+  P(6, 0, 4, 1, hat); P(5, 1, 6, 2, hat); P(5, 3, 6, 1, band); P(2, 4, 12, 2, hat); P(2, 5, 12, 1, hatD);
+}
+
+/* ---------- objects: sprites that stand on the ground and can be taller or wider than a tile ---------- */
+/* Each object sprite is a canvas plus its anchor (ax, ay): the point that touches the ground.
+   Objects are drawn sorted by that point, so the one in front covers the one behind. */
+const cache = new Map();
+function cached(key, w, h, ax, ay, fn) {
+  let o = cache.get(key);
+  if (!o) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = false; fn(g);
+    o = {img:c, ax, ay, w, h}; cache.set(key, o);
+  }
+  return o;
+}
+function sprite(kind, a, b) {
+  switch (kind) {
+    case 'tree':   return cached('tree' + a, 32, 40, 16, 40, g => drawTree(g, a));
+    case 'bush':   return cached('bush', 20, 16, 10, 16, g => drawBush(g));
+    case 'well':   return cached('well', 16, 28, 8, 28, g => drawWell(g));
+    case 'house':  return cached('house' + (a ? 1 : 0), 64, 60, 0, 60, g => {
+      const P = painter(g, 0, 0);
+      P(46, 0, 7, 16, '#7d7d74'); P(46, 0, 7, 2, '#9d9d92'); P(51, 2, 2, 14, '#626259');
+      drawHouse(g, a, 0, 12 / T);
+    });
+    case 'market': return cached('market', 80, 48, 0, 48, g => drawMarket(g, 0, 0));
+    case 'player': return cached('player' + a + b, 16, 24, 8, 24, g => drawPlayer(g, 0, 0, a, b));
+    case 'crop':   return cached('crop' + a + b, 32, 44, 16, 44, g => drawCrop(g, 8, 28, a, b));
+  }
+  return null;
+}
+const sils = new WeakMap();
+function silhouette(img) {
+  let s = sils.get(img);
+  if (!s) {
+    s = document.createElement('canvas'); s.width = img.width; s.height = img.height;
+    const g = s.getContext('2d'); g.drawImage(img, 0, 0);
+    g.globalCompositeOperation = 'source-in'; g.fillStyle = '#06102a'; g.fillRect(0, 0, s.width, s.height);
+    sils.set(img, s);
+  }
+  return s;
+}
+
+/* ---------- sun and light ---------- */
+/* The sun rises at 6:00 in the east and sets at 20:30 in the west.
+   Shadows fall away from it: long and to the left in the morning, short at noon, long and to the right in the evening. */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function sunAt(min) {
+  const t = (min - 360) / 870;
+  if (t <= 0 || t >= 1) return null;
+  const a = t * Math.PI, elev = Math.sin(a);
+  return {
+    shear: -Math.cos(a) * clamp(0.35 / Math.max(elev, 0.2), 0.35, 1.4),
+    len: clamp(0.22 + (1 - elev) * 0.45, 0.22, 0.65),
+    alpha: 0.34 * Math.min(1, elev * 3.5)
+  };
+}
+/* g must already carry the world transform; (px, py) is where the object touches the ground */
+function castShadow(g, o, px, py, sun) {
+  g.save();
+  g.transform(1, 0, -sun.shear, -sun.len, px - o.ax + sun.shear * o.ay, py + sun.len * o.ay);
+  g.drawImage(silhouette(o.img), 0, 0);
+  g.restore();
+}
+/* colour of the light over the day, multiplied over the whole picture */
+const TINT = [[0, [70, 80, 140]], [300, [80, 90, 150]], [360, [255, 186, 150]], [450, [255, 226, 198]], [600, [255, 248, 238]],
+  [720, [255, 255, 255]], [900, [255, 252, 244]], [1080, [255, 224, 184]], [1200, [242, 168, 128]], [1260, [150, 128, 188]],
+  [1320, [96, 100, 166]], [1440, [70, 80, 140]]];
+function tintAt(min) {
+  for (let i = 1; i < TINT.length; i++) {
+    const [m1, c1] = TINT[i], [m0, c0] = TINT[i - 1];
+    if (min <= m1) { const f = (min - m0) / (m1 - m0); return c0.map((v, j) => Math.round(v + (c1[j] - v) * f)); }
+  }
+  return TINT[TINT.length - 1][1];
+}
+/* warm glow at sunrise and sunset */
+function glowAt(min) { return Math.max(0, 0.1 * (1 - Math.abs(min - 390) / 90), 0.1 * (1 - Math.abs(min - 1190) / 90)); }
+function applyLight(g, w, h, min) {
+  const [r, gg, b] = tintAt(min);
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = `rgb(${r},${gg},${b})`; g.fillRect(0, 0, w, h);
+  const gl = glowAt(min);
+  if (gl > 0) { g.globalCompositeOperation = 'screen'; g.fillStyle = `rgba(255,160,80,${gl})`; g.fillRect(0, 0, w, h); }
+  g.restore();
 }
 
 
-return {T, C, CROPS, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, drawProduce, iconCanvas, drawPlayer};
+return {T, C, CROPS, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, drawProduce, iconCanvas, drawPlayer,
+  sprite, silhouette, sunAt, castShadow, tintAt, applyLight};
 })();

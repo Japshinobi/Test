@@ -124,10 +124,11 @@ footer{margin-top:36px;font-size:13px;color:var(--muted)}
     <div class="sec-head"><h2>Правила стиля</h2></div>
     <p class="sec-desc">Общие договорённости, чтобы новые рисунки выглядели как часть одной игры.</p>
     <div class="rules">
-      <div class="rule"><div class="k">Размер клетки</div><div class="v">32 × 32 пикселя</div><p>Персонаж 32 × 48: клетка в ширину, полторы в высоту. Дом 128 × 96 (4 × 3 клетки), рынок 160 × 96 (5 × 3). Черновые рисунки пока 16 × 16 и в игре растягиваются вдвое.</p></div>
+      <div class="rule"><div class="k">Размер клетки</div><div class="v">32 × 32 пикселя</div><p>Объекты не обязаны помещаться в клетку: персонаж 32 × 48, деревья и кусты выходят за клетку вверх и в стороны. Дом 128 × 96 (4 × 3 клетки), рынок 160 × 96 (5 × 3). Черновые рисунки пока 16 × 16 и в игре растягиваются вдвое.</p></div>
       <div class="rule"><div class="k">Пиксель на экране</div><div class="v">2 × 2 на 1080p</div><p>Как в Террарии. Масштаб растёт только целыми шагами: 3 × 3 на 1440p, 4 × 4 на 4K. Пиксели никогда не размываются и не растягиваются неровно.</p></div>
       <div class="rule"><div class="k">Вид</div><div class="v">Сверху, слегка под углом</div><p>Как в Stardew Valley: видна крыша и передняя стена дома, у персонажа видно лицо и одежду.</p></div>
-      <div class="rule"><div class="k">Свет</div><div class="v">Сверху слева</div><p>Блики рисуются светлым цветом вверху и слева, тени — тёмным внизу и справа.</p></div>
+      <div class="rule"><div class="k">Свет</div><div class="v">Сверху слева</div><p>Блики рисуются светлым цветом вверху и слева, тени — тёмным внизу и справа. Тени на земле в спрайты не рисуются: их отбрасывает игра.</p></div>
+      <div class="rule"><div class="k">Солнце</div><div class="v">Тени и цвет по времени</div><p>Утром длинные тени влево и тёплый свет, в полдень короткие тени, вечером длинные тени вправо и золотистый свет, ночью синий полумрак.</p></div>
       <div class="rule"><div class="k">Обводка</div><div class="v">Без чёрного контура</div><p>Форму задаёт тёмный оттенок того же цвета, а не чёрная линия.</p></div>
       <div class="rule"><div class="k">Палитра</div><div class="v">В духе Террарии</div><p>Насыщенная зелень, бурая земля, песок, синяя вода. Каждый материал — три оттенка: светлый, основной, тёмный.</p></div>
       <div class="rule"><div class="k">Анимация</div><div class="v">2 кадра ходьбы</div><p>Персонаж: 4 направления по 2 кадра. Вода движется сама, растения меняются раз в игровой день.</p></div>
@@ -164,22 +165,22 @@ function sprite(w, h, fn) {
 }
 function sizeCanvas(c) { c.style.width = c.dataset.w * zoom + 'px'; c.style.height = c.dataset.h * zoom + 'px'; }
 const fig = (canvas, cap) => { const f = document.createElement('figure'); f.append(canvas); if (cap) { const fc = document.createElement('figcaption'); fc.textContent = cap; f.append(fc); } return f; };
-const nofence = () => false;
+const obj = (kind, a, b) => { const o = S.sprite(kind, a, b); return sprite(o.w, o.h, g => g.drawImage(o.img, 0, 0)); };
 
 /* ---------- catalogue ---------- */
 const STAGES = ['семя', 'росток', 'куст', 'урожай'];
 const SECTIONS = [
   {id:'characters', title:'Персонажи', desc:'Герой и жители деревни. Пока их двое: Тёма и тётя Галя.', items:[
-    {id:'tema', name:'Тёма', meta:'16 × 16 · 4 направления × 2 кадра ходьбы', wide:true, figs:() =>
-      ['down', 'left', 'right', 'up'].flatMap(f => [0, 1].map(fr => fig(sprite(16, 16, g => S.drawPlayer(g, 0, 1, f, fr)), {down:'вниз', left:'влево', right:'вправо', up:'вверх'}[f] + ' ' + (fr + 1))))},
+    {id:'tema', name:'Тёма', meta:'16 × 24 (будет 32 × 48) · 4 направления × 2 кадра ходьбы', wide:true, figs:() =>
+      ['down', 'left', 'right', 'up'].flatMap(f => [0, 1].map(fr => fig(obj('player', f, fr), {down:'вниз', left:'влево', right:'вправо', up:'вверх'}[f] + ' ' + (fr + 1))))},
     {id:'galya', name:'Тётя Галя', meta:'12 × 18 · пока нарисована как часть рынка', figs:() => {
       const full = sprite(80, 48, g => S.drawMarket(g, 0, 0));
       return [fig(sprite(14, 18, g => g.drawImage(full, 33, 14, 14, 18, 0, 0, 14, 18)), 'за прилавком')];
     }}
   ]},
   {id:'plants', title:'Растения', desc:'Каждая культура растёт в четыре стадии. Яблоня выше остальных и после первого урожая остаётся деревом.', items:
-    KEYS.map(k => ({id:k, name:CROPS[k].name, meta:`16 × ${k === 'apple' ? 24 : 16} · растёт ${CROPS[k].grow} дн.` + (CROPS[k].regrow ? `, плодоносит каждые ${CROPS[k].regrow} дн.` : ''), wide:true,
-      figs:() => [0, 1, 2, 3].map(st => fig(sprite(16, k === 'apple' ? 24 : 16, g => { if (k !== 'apple') S.drawSoil(g, 0, 0, false); S.drawCrop(g, 0, k === 'apple' ? 8 : 0, k, st); }), STAGES[st] + (k === 'apple' && st === 2 ? ' / дерево' : '')))}))
+    KEYS.map(k => ({id:k, name:CROPS[k].name, meta:(k === 'apple' ? 'от 16 × 16 до 32 × 44' : k === 'tomato' || k === 'carrot' || k === 'potato' ? '16 × 16, куст выше клетки' : '16 × 16') + ` · растёт ${CROPS[k].grow} дн.` + (CROPS[k].regrow ? `, плодоносит каждые ${CROPS[k].regrow} дн.` : ''), wide:true,
+      figs:() => [0, 1, 2, 3].map(st => fig(sprite(32, 44, g => { S.drawSoil(g, 8, 28, false); g.drawImage(S.sprite('crop', k, st).img, 0, 0); }), k === 'apple' ? ['саженец', 'молодая', 'взрослая', 'с яблоками'][st] : STAGES[st]))}))
   },
   {id:'items', title:'Предметы', desc:'Иконки в поясе инструментов и на рынке. Рисуются в клетке 16 × 16, в игре показываются вдвое крупнее.', items:[
     {id:'tools', name:'Инструменты', meta:'16 × 16', figs:() => [fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('hoe'), 0, 0)), 'мотыга'), fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('can'), 0, 0)), 'лейка')]},
@@ -188,10 +189,10 @@ const SECTIONS = [
     {id:'upgrades', name:'Улучшения', meta:'16 × 16 · иконки в лавке', figs:() => [fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('field'), 0, 0)), 'участок'), fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('house'), 0, 0)), 'ремонт')]}
   ]},
   {id:'objects', title:'Постройки и объекты', desc:'Всё, что стоит на карте и мешает пройти: дом, рынок, колодец, деревья, кусты, забор.', items:[
-    {id:'house', name:'Дедушкин дом', meta:'64 × 48 · до и после ремонта', wide:true, figs:() => [fig(sprite(64, 48, g => S.drawHouse(g, false, 0, 0)), 'старый'), fig(sprite(64, 48, g => S.drawHouse(g, true, 0, 0)), 'после ремонта')]},
-    {id:'market', name:'Рынок тёти Гали', meta:'80 × 48', wide:true, figs:() => [fig(sprite(80, 48, g => S.drawMarket(g, 0, 0)), '')]},
-    {id:'well', name:'Колодец', meta:'16 × 16', figs:() => [fig(sprite(16, 16, g => S.drawWell(g, 0, 0)), '')]},
-    {id:'tree', name:'Дерево и куст', meta:'16 × 16', figs:() => [fig(sprite(16, 16, g => S.drawTree(g, 0, 0)), 'дерево'), fig(sprite(16, 16, g => S.drawBush(g, 0, 0)), 'куст')]},
+    {id:'house', name:'Дедушкин дом', meta:'64 × 60, стоит на 4 × 3 клетках · до и после ремонта', wide:true, figs:() => [fig(obj('house', false), 'старый'), fig(obj('house', true), 'после ремонта')]},
+    {id:'market', name:'Рынок тёти Гали', meta:'80 × 48', wide:true, figs:() => [fig(obj('market'), '')]},
+    {id:'well', name:'Колодец', meta:'16 × 28, навес выше клетки', figs:() => [fig(obj('well'), '')]},
+    {id:'tree', name:'Деревья и куст', meta:'32 × 40, крона шире и выше клетки · куст 20 × 16', wide:true, figs:() => [fig(obj('tree', 0), 'раскидистое'), fig(obj('tree', 1), 'высокое'), fig(obj('bush'), 'куст')]},
     {id:'fence', name:'Забор', meta:'16 × 16 · соединяется с соседними секциями', wide:true, figs:() => {
       const piece = (w, h, isF) => sprite(w * 16, h * 16, g => { for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) isF(x, y) ? S.drawFence(g, x, y, (a, b) => a >= 0 && b >= 0 && a < w && b < h && isF(a, b)) : S.drawGrass(g, x, y); });
       return [fig(piece(1, 1, () => true), 'столбик'), fig(piece(3, 1, () => true), 'пролёт'), fig(piece(3, 3, (x, y) => x === 0 || y === 0), 'угол')];
@@ -214,7 +215,14 @@ const SECTIONS = [
   ]},
   {id:'effects', title:'Эффекты и освещение', desc:'Короткие вспышки частиц при действиях и смена дня и ночи.', items:[
     {id:'particles', name:'Частицы', meta:'2 × 2 пикселя, живут полсекунды', figs:() => [['#6e4a30', 'копка'], ['#6a98f4', 'полив'], ['#4a2c16', 'посадка'], ['#e8832a', 'урожай']].map(([c, n]) => fig(sprite(16, 16, g => { S.drawGrass(g, 0, 0); g.fillStyle = c; [[4, 5], [9, 3], [12, 7], [6, 9], [10, 11], [3, 12]].forEach(([x, y]) => g.fillRect(x, y, 2, 2)); }), n))},
-    {id:'night', name:'Время суток', meta:'после 18:00 мир постепенно темнеет', wide:true, figs:() => [0, .2, .35, .5].map((a, i) => fig(sprite(32, 16, g => { S.drawGrass(g, 0, 0); S.drawTree(g, 1, 0); S.drawPlayer(g, 0, 0, 'down', 0); g.fillStyle = `rgba(18,22,60,${a})`; g.fillRect(0, 0, 32, 16); }), ['день', '19:00', '20:00', '22:00'][i]))}
+    {id:'light', name:'Свет и тени', meta:'тени идут за солнцем, свет меняет цвет за день', wide:true, figs:() => [[400, '6:40'], [720, '12:00'], [1170, '19:30'], [1300, '21:40']].map(([m, t]) => fig(sprite(48, 40, g => {
+      for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) S.drawGrass(g, x, y);
+      const items = [[S.sprite('tree', 0), 22, 34], [S.sprite('player', 'down', 0), 36, 36]];
+      const sun = S.sunAt(m);
+      if (sun) { const sh = document.createElement('canvas'); sh.width = 48; sh.height = 40; const sg = sh.getContext('2d'); items.forEach(([o, x, y]) => S.castShadow(sg, o, x, y, sun)); g.globalAlpha = sun.alpha; g.drawImage(sh, 0, 0); g.globalAlpha = 1; }
+      items.forEach(([o, x, y]) => g.drawImage(o.img, x - o.ax, y - o.ay));
+      S.applyLight(g, 48, 40, m);
+    }), t))}
   ]}
 ];
 
@@ -300,11 +308,16 @@ function drawScene() {
     else S.drawGrass(g, x, y);
   }
   S.drawHouse(g, true, 0, 0);
+  const sceneObjs = [];
   const crops = [['carrot', 3], ['potato', 2], ['strawberry', 3], ['tomato', 1], ['pumpkin', 3]];
-  crops.forEach(([k, st], i) => { S.drawSoil(g, (6 + i) * T, 2 * T, i % 2 === 0); S.drawCrop(g, (6 + i) * T, 2 * T, k, st); });
-  for (let i = 0; i < 5; i++) { S.drawSoil(g, (6 + i) * T, 3 * T, true); S.drawCrop(g, (6 + i) * T, 3 * T, KEYS[i], i % 3); }
-  S.drawCrop(g, 11 * T, 3 * T, 'apple', 3);
-  S.drawPlayer(g, 5 * T, 3 * T, 'right', 0);
+  crops.forEach(([k, st], i) => { S.drawSoil(g, (6 + i) * T, 2 * T, i % 2 === 0); sceneObjs.push([S.sprite('crop', k, st), (6 + i) * T + 8, 3 * T]); });
+  for (let i = 0; i < 5; i++) { S.drawSoil(g, (6 + i) * T, 3 * T, true); sceneObjs.push([S.sprite('crop', KEYS[i], i % 3), (6 + i) * T + 8, 4 * T]); }
+  sceneObjs.push([S.sprite('crop', 'apple', 3), 11 * T + 8, 4 * T], [S.sprite('player', 'right', 0), 5 * T + 8, 4 * T]);
+  const sun = S.sunAt(560), sh = document.createElement('canvas'); sh.width = 192; sh.height = 80;
+  sceneObjs.forEach(([o, x, y]) => S.castShadow(sh.getContext('2d'), o, x, y, sun));
+  g.globalAlpha = sun.alpha; g.drawImage(sh, 0, 0); g.globalAlpha = 1;
+  sceneObjs.sort((a, b) => a[2] - b[2]).forEach(([o, x, y]) => g.drawImage(o.img, x - o.ax, y - o.ay));
+  S.applyLight(g, 192, 80, 560);
 }
 
 /* ---------- ideas (shared store) ---------- */

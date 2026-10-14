@@ -151,7 +151,7 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-const {C, CROPS, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, iconCanvas, drawPlayer} = window.OgorodSprites;
+const {C, CROPS, hash, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, cropStage, drawSoil, drawWater, iconCanvas, sprite, sunAt, castShadow, applyLight} = window.OgorodSprites;
 const KEYS = Object.keys(CROPS);
 const TOOLS = [{id:'hoe', name:'Мотыга'}, {id:'can', name:'Лейка'}, ...KEYS.map(k => ({id:'seed', k, name:CROPS[k].seedName}))];
 const UPGRADES = [
@@ -230,17 +230,25 @@ function buildBg() {
     if (ch === '=') drawPath(g, x, y);
     else if (ch === ',') drawFlowers(g, x, y);
     else if (ch === '#') drawFence(g, x, y, (a, b) => inMap(a, b) && map[b][a] === '#');
-    else if (ch === 'T') drawTree(g, x, y);
-    else if (ch === 'B') drawBush(g, x, y);
-    else if (ch === 'W') drawWell(g, x, y);
     else if (ch === 'F' || ch === 'G') drawLocked(g, x, y);
     else if (ch === 'f') drawDirt(g, x, y);
     else if (ch === '~') { g.fillStyle = C.water; g.fillRect(x * T, y * T, T, T); }
     else drawGrass(g, x, y);
   }
-  drawHouse(g, state.house);
-  drawMarket(g);
   return c;
+}
+/* things that stand on the ground: drawn every frame sorted by where they touch the ground, and cast shadows */
+let objects = [];
+function buildObjects() {
+  objects = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const ch = map[y][x], px = x * T + T / 2, py = y * T + T;
+    if (ch === 'T') objects.push({kind:'tree', a:hash(x, y, 11) < 0.35 ? 1 : 0, px, py});
+    else if (ch === 'B') objects.push({kind:'bush', px, py});
+    else if (ch === 'W') objects.push({kind:'well', px, py});
+  }
+  objects.push({kind:'house', px:2 * T, py:4 * T});
+  objects.push({kind:'market', px:26 * T, py:10 * T});
 }
 
 /* ---------- game logic ---------- */
@@ -402,7 +410,7 @@ function openHelp() {
     if (b.dataset.act === 'reset') openPanel(`<h2>Начать заново?</h2><p>Весь прогресс сотрётся: деньги, грядки и покупки.</p>
       <div class="btns"><button class="btn warn" data-act="yes">Да, начать заново</button><button class="btn alt" data-close data-focus>Нет</button></div>`, b2 => {
       if (b2.dataset.act === 'yes') {
-        state = newState(); buildMap(); player = makePlayer(); bgDirty = true; particles = []; save(); openIntro();
+        state = newState(); buildMap(); buildObjects(); player = makePlayer(); bgDirty = true; particles = []; save(); openIntro();
       }
     });
   });
@@ -494,7 +502,7 @@ function shopClick(b) {
     if (u && state.money >= u.cost && !(u.id === 'field3' && state.zones < 2)) {
       state.money -= u.cost; SFX.coin();
       if (u.id === 'can') { state.cap = 30; state.water = 30; }
-      if (u.id === 'field2' || u.id === 'field3') { state.zones = u.id === 'field2' ? 2 : 3; buildMap(); bgDirty = true; }
+      if (u.id === 'field2' || u.id === 'field3') { state.zones = u.id === 'field2' ? 2 : 3; buildMap(); buildObjects(); bgDirty = true; }
       if (u.id === 'house') { state.house = true; bgDirty = true; save(); return openWin(); }
     }
   }
@@ -583,6 +591,7 @@ function updateBelt() {
 
 /* ---------- render ---------- */
 const cam = {x:0, y:0, ox:0, oy:0};
+const shadowCv = document.createElement('canvas'), sctx = shadowCv.getContext('2d');
 function camAxis(center, view, world) { return view >= world ? (world - view) / 2 : clamp(center - view / 2, 0, world - view); }
 function render(now) {
   const p = player;
@@ -604,11 +613,6 @@ function render(now) {
       if (pl && pl.t) drawSoil(ctx, X, Y, pl.w);
     }
   }
-  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-    if (map[y][x] !== 'f') continue;
-    const pl = state.plots[x + ',' + y];
-    if (pl && pl.c) drawCrop(ctx, x * T, y * T, pl.c.k, cropStage(pl.c));
-  }
   if (!panelOpen && !p.moving) {
     const [fx, fy] = front();
     if (inMap(fx, fy)) {
@@ -617,13 +621,31 @@ function render(now) {
       ctx.strokeRect(fx * T + a / 2, fy * T + a / 2, T - a, T - a);
     }
   }
-  drawPlayer(ctx, Math.round(rx), Math.round(ry), p.face, p.moving ? Math.floor(p.walk * 8) % 2 : 0);
+  /* everything standing on the ground this frame */
+  const list = [];
+  const inView = (px, py) => px > cam.x - 96 && px < cam.x + viewW + 48 && py > cam.y - 8 && py < cam.y + viewH + 64;
+  objects.forEach(o => { if (inView(o.px, o.py)) list.push({o:sprite(o.kind, o.kind === 'house' ? state.house : o.a), px:o.px, py:o.py}); });
+  for (let y = y0; y <= Math.min(H - 1, y1 + 2); y++) for (let x = x0; x <= x1; x++) {
+    if (map[y][x] !== 'f') continue;
+    const pl = state.plots[x + ',' + y];
+    if (pl && pl.c) list.push({o:sprite('crop', pl.c.k, cropStage(pl.c)), px:x * T + T / 2, py:y * T + T});
+  }
+  const frame = p.moving ? Math.floor(p.walk * 8) % 2 : 0;
+  list.push({o:sprite('player', p.face, frame), px:Math.round(rx) + T / 2, py:Math.round(ry) + T, me:true});
+  /* shadows go on their own layer first, so overlapping shadows do not get darker */
+  const sun = sunAt(state.min);
+  if (sun && sun.alpha > 0.01) {
+    if (shadowCv.width !== cv.width || shadowCv.height !== cv.height) { shadowCv.width = cv.width; shadowCv.height = cv.height; }
+    sctx.setTransform(1, 0, 0, 1, 0, 0); sctx.clearRect(0, 0, shadowCv.width, shadowCv.height);
+    sctx.setTransform(S, 0, 0, S, -cam.ox, -cam.oy); sctx.imageSmoothingEnabled = false;
+    list.forEach(it => castShadow(sctx, it.o, it.px, it.py, sun));
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = sun.alpha; ctx.drawImage(shadowCv, 0, 0); ctx.restore();
+  }
+  list.sort((a, b) => a.py - b.py || (a.me ? 1 : 0) - (b.me ? 1 : 0) || a.px - b.px);
+  list.forEach(it => ctx.drawImage(it.o.img, it.px - it.o.ax, it.py - it.o.ay));
   particles.forEach(q => { ctx.fillStyle = q.c; ctx.fillRect(Math.round(q.x), Math.round(q.y), 2, 2); });
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (state.min > 1080) {
-    ctx.fillStyle = `rgba(18,22,60,${Math.min(.5, (state.min - 1080) / 240 * .5)})`;
-    ctx.fillRect(0, 0, cv.width, cv.height);
-  }
+  applyLight(ctx, cv.width, cv.height, state.min);
 }
 
 /* ---------- input ---------- */
@@ -708,7 +730,7 @@ function loop(now) {
 }
 function start(data) {
   state = merge((data && data.state) || load());
-  resize(); buildMap(); player = makePlayer(); buildBelt(); bgDirty = true;
+  resize(); buildMap(); buildObjects(); player = makePlayer(); buildBelt(); bgDirty = true;
   if (window.claude && window.claude.hot && window.claude.hot.snapshot) window.claude.hot.snapshot(() => ({state:snap()}));
   if (!state.intro) openIntro(); else toast('С возвращением! День ' + state.day + '.');
   requestAnimationFrame(loop);
