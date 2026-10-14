@@ -33,15 +33,17 @@ body{font-family:var(--f-ui);font-size:15px;line-height:1.4}
 .tools{display:flex;gap:5px;flex:none}
 .mini{font:inherit;font-size:14px;background:var(--glass);color:var(--text);border:2px solid var(--edge);border-radius:6px;padding:3px 10px;cursor:pointer;text-shadow:1px 1px 0 #000}
 .mini:hover{border-color:var(--gold)}
-.bottom{position:absolute;left:50%;transform:translateX(-50%);bottom:max(10px,env(safe-area-inset-bottom,0px));width:min(560px,calc(100% - 20px));display:flex;flex-direction:column;gap:4px;pointer-events:none}
+.bottom{position:absolute;left:50%;transform:translateX(-50%);bottom:max(10px,env(safe-area-inset-bottom,0px));width:min(720px,calc(100% - 20px));display:flex;flex-direction:column;gap:4px;pointer-events:none}
 .belt{pointer-events:auto}
 .toast{position:absolute;left:50%;bottom:calc(max(10px,env(safe-area-inset-bottom,0px)) + 110px);transform:translateX(-50%) translateY(6px);max-width:calc(100% - 24px);background:rgba(21,27,74,.92);border:2px solid var(--gold);border-radius:6px;padding:5px 10px;text-align:center;font-size:14px;text-shadow:1px 1px 0 #000;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .holding{font-size:13px;color:var(--muted);text-align:center;text-shadow:1px 1px 0 #000,0 0 4px #000}
 .holding b{color:var(--text);font-weight:500}
-.belt{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.belt{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:3px}
 .slot{position:relative;background:var(--glass-2);border:2px solid var(--edge);border-radius:6px;padding:7px 0 5px;display:flex;justify-content:center;cursor:pointer;min-width:0;color:var(--text);font:inherit;text-shadow:1px 1px 0 #000}
-.slot canvas{width:32px;height:32px;image-rendering:pixelated}
+.slot canvas{width:28px;height:28px;image-rendering:pixelated}
+.slot.off::after{content:'';position:absolute;inset:3px;border-radius:4px;background:repeating-linear-gradient(135deg,transparent 0 5px,rgba(15,22,56,.45) 5px 7px);pointer-events:none}
+@media (max-width:520px){.slot canvas{width:20px;height:20px}.slot .key{font-size:9px}.slot .n{font-size:10px}}
 .slot[aria-pressed="true"]{border-color:var(--gold);background:var(--panel-2);box-shadow:0 0 0 1px var(--gold)}
 .slot .key{position:absolute;top:1px;left:4px;font-size:11px;color:var(--muted)}
 .slot .n{position:absolute;bottom:1px;right:4px;font-size:12px;font-variant-numeric:tabular-nums}
@@ -122,7 +124,7 @@ body{font-family:var(--f-ui);font-size:15px;line-height:1.4}
   <div class="bottom">
     <div class="holding" id="holding"></div>
     <div class="belt" id="belt"></div>
-    <div class="kbd">Стрелки или WASD — ходить · Пробел или E — действие · 1–8 — предмет · Щелчок по клетке — подойти и сделать</div>
+    <div class="kbd">Стрелки или WASD — ходить · Пробел или E — действие · 1–0 − = — предмет · Щелчок по клетке — подойти и сделать</div>
   </div>
 </div>
 
@@ -151,7 +153,7 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-const {C, CROPS, hash, drawGrass, drawPath, drawDirt, decoKind, fenceMask, cropStage, drawSoil, drawWater, iconCanvas, sprite, sunAt, castShadow, applyLight} = window.OgorodSprites;
+const {C, CROPS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, clearCache, hash, drawGrass, drawPath, drawDirt, decoKind, fenceMask, cropStage, drawSoil, drawWater, iconCanvas, sprite, sunAt, castShadow, applyLight} = window.OgorodSprites;
 const KEYS = Object.keys(CROPS);
 const TOOLS = [{id:'hoe', name:'Мотыга'}, {id:'can', name:'Лейка'}, ...KEYS.map(k => ({id:'seed', k, name:CROPS[k].seedName}))];
 const UPGRADES = [
@@ -175,9 +177,9 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 function newState() {
   const seeds = {}, produce = {};
   KEYS.forEach(k => { seeds[k] = 0; produce[k] = 0; });
-  seeds.carrot = 6; seeds.potato = 3;
+  seeds.radish = 6; seeds.potato = 3;
   return {v:1, day:1, min:360, money:100, water:10, cap:10, zones:1, house:false,
-          plots:{}, seeds, produce, tool:0, px:4, py:5, face:'down', intro:false, lateWarned:false};
+          plots:{}, seeds, produce, tool:0, px:4, py:5, face:'down', intro:false, lateWarned:false, snowCover:false, snowTrod:{}};
 }
 function merge(s) {
   const b = newState();
@@ -186,6 +188,7 @@ function merge(s) {
   o.seeds = {...b.seeds, ...(s.seeds || {})};
   o.produce = {...b.produce, ...(s.produce || {})};
   o.plots = s.plots && typeof s.plots === 'object' ? s.plots : {};
+  o.snowTrod = s.snowTrod && typeof s.snowTrod === 'object' ? s.snowTrod : {};
   return o;
 }
 let state, player, map = [], bg = null, bgDirty = true, panelOpen = false, panelHandler = null, panelClosable = true;
@@ -195,6 +198,16 @@ const held = [];
 function snap() { return {...state, px: player ? player.x : state.px, py: player ? player.y : state.py, face: player ? player.face : state.face}; }
 function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(snap())); } catch (e) {} }
 function load() { try { const s = localStorage.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+
+/* ---------- seasons and weather ---------- */
+let look = null;
+const season = () => seasonOf(state.day);
+/* about every other winter day it snows; the snow settles by the next morning */
+function weatherFor(day) { return seasonOf(day).id === 'winter' && hash(day, 5, 77) < 0.5 ? 'snow' : 'clear'; }
+function refreshLook() { look = lookFor(state.day, state.snowCover); clearCache(); bgDirty = true; buildObjects(); }
+const inSeason = (k, sid) => CROPS[k].seasons.includes(sid);
+const canPlant = (k, sid) => (CROPS[k].plant || CROPS[k].seasons).includes(sid);
+const seasonNames = list => list.map(id => ({spring:'весна', summer:'лето', autumn:'осень', winter:'зима'})[id]).join(', ');
 
 /* ---------- map ---------- */
 function buildMap() {
@@ -222,17 +235,24 @@ function buildMap() {
 const inMap = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
 const walkable = (x, y) => inMap(x, y) && WALK.includes(map[y][x]);
 
-function buildBg() {
+/* the ground for the day; with snow also a snowless copy, shown where Tёма has trodden the snow down */
+let bgBare = null;
+function buildGround(snow) {
   const c = document.createElement('canvas'); c.width = W * T; c.height = H * T;
   const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const ch = map[y][x];
-    if (ch === '=') drawPath(g, x, y);
+    if (ch === '~') { g.fillStyle = C.water; g.fillRect(x * T, y * T, T, T); }
+    else if (snow) drawSnow(g, x, y);
+    else if (ch === '=') drawPath(g, x, y);
     else if (ch === 'f') drawDirt(g, x, y);
-    else if (ch === '~') { g.fillStyle = C.water; g.fillRect(x * T, y * T, T, T); }
-    else drawGrass(g, x, y);
+    else { drawGrass(g, x, y, look.grass); if (look.fallen && hash(x, y, 13) < .7) drawFallen(g, x, y, look.fallen); }
   }
   return c;
+}
+function buildBg() {
+  bgBare = look.snow ? buildGround(false) : null;
+  return buildGround(look.snow);
 }
 /* things that stand on the ground: drawn every frame sorted by where they touch the ground, and cast shadows */
 let objects = [];
@@ -245,7 +265,7 @@ function buildObjects() {
     else if (ch === 'W') objects.push({kind:'well', px, py});
     else if (ch === '#') objects.push({kind:'fence', a:fenceMask(x, y, (a, b) => inMap(a, b) && map[b][a] === '#'), px, py});
     else if (ch === 'F' || ch === 'G') objects.push({kind:'deco', a:decoKind(x, y), px, py});
-    else if (ch === ',') objects.push({kind:'flower', a:x, b:y, px, py});
+    else if (ch === ',' && look && look.flowers !== 'none' && !look.snow) objects.push({kind:'flower', a:x, b:y, px, py});
   }
   objects.push({kind:'house', px:2 * T, py:4 * T});
   objects.push({kind:'market', px:26 * T, py:10 * T});
@@ -276,7 +296,7 @@ function update(dt) {
   if (state.min >= 1380 && !state.lateWarned) { state.lateWarned = true; toast('Уже 23:00. Пора домой — дверь дома в левом верхнем углу.'); }
   if (state.min >= 1440) { newDay('Тёма так заработался, что уснул прямо на улице. Соседи проводили его до дома.'); return; }
   const p = player;
-  if (p.moving) { p.t += dt / 0.15; p.walk += dt; if (p.t >= 1) { p.x = p.tx; p.y = p.ty; p.moving = false; p.t = 0; } }
+  if (p.moving) { p.t += dt / 0.15; p.walk += dt; if (p.t >= 1) { p.x = p.tx; p.y = p.ty; p.moving = false; p.t = 0; if (state.snowCover) state.snowTrod[p.x + ',' + p.y] = 1; } }
   if (!p.moving) {
     const d = held[held.length - 1];
     if (d) { p.path = []; p.pending = null; step(d); }
@@ -308,8 +328,10 @@ function act(tx, ty) {
     if (tool.id !== 'can') { SFX.nope(); toast('Копать и сажать можно только на огороде за забором.'); }
     return;
   }
-  const key = tx + ',' + ty, pl = state.plots[key];
+  const key = tx + ',' + ty, pl = state.plots[key], sid = season().id;
+  if (pl && pl.c && pl.c.dead) { pl.c = null; SFX.till(); puff(tx, ty, '#8a6a3a', 8); return toast('Увядшее растение убрано. Грядка свободна.'); }
   if (pl && pl.c && pl.c.ripe) return harvest(tx, ty, pl);
+  if (sid === 'winter' && tool.id !== 'can') { SFX.nope(); return toast('Зимой земля промёрзла. Огород отдыхает до весны.'); }
   if (tool.id === 'hoe') {
     if (!pl || !pl.t) { state.plots[key] = {t:1, w:0, c:null}; SFX.till(); puff(tx, ty, C.soil); }
     else if (pl.c) toast('Тут растёт: ' + CROPS[pl.c.k].name.toLowerCase() + '.');
@@ -318,6 +340,7 @@ function act(tx, ty) {
   }
   if (tool.id === 'can') {
     if (!pl || !pl.t) { SFX.nope(); return toast('Сначала вскопайте землю мотыгой.'); }
+    if (sid === 'winter') return toast('Зимой поливать не нужно: земля спит под снегом.');
     if (pl.w) return toast('Здесь уже полито.');
     if (state.water <= 0) { SFX.nope(); return toast('Лейка пуста. Наберите воды в колодце или пруду.'); }
     state.water--; pl.w = 1; SFX.water(); puff(tx, ty, C.waterL);
@@ -327,6 +350,7 @@ function act(tx, ty) {
   if (!pl || !pl.t) { SFX.nope(); return toast('Сначала вскопайте землю мотыгой.'); }
   if (pl.c) return toast('Тут уже растёт: ' + CROPS[pl.c.k].name.toLowerCase() + '.');
   if (state.seeds[k] <= 0) { SFX.nope(); return toast('Закончилось: ' + d.seedName.toLowerCase() + '. Купите на рынке.'); }
+  if (!canPlant(k, sid)) { SFX.nope(); return toast(d.name + ': сажают в сезон «' + seasonNames(d.plant || d.seasons) + '». Сейчас ' + season().name.toLowerCase() + '.'); }
   state.seeds[k]--; pl.c = {k, age:0, ripe:false, grown:false}; SFX.plant(); puff(tx, ty, '#4a2c16', 4);
 }
 
@@ -343,22 +367,43 @@ function factor(k, day = state.day) { return 0.8 + 0.45 * hash(day, KEYS.indexOf
 function price(k) { return Math.max(1, Math.round(CROPS[k].sell * factor(k))); }
 
 function newDay(note) {
-  const ripened = {}; let dry = 0;
+  const ripened = {}, withered = {}; let dry = 0;
+  const snowed = weatherFor(state.day) === 'snow', before = season().id;
+  const next = seasonOf(state.day + 1).id, changed = next !== before;
   for (const key in state.plots) {
-    const pl = state.plots[key];
-    if (pl.c && !pl.c.ripe) {
-      const d = CROPS[pl.c.k];
-      if (!pl.w) dry++;
-      pl.c.age += pl.w ? 1 : 0.5;
-      if (pl.c.age >= d.grow) { pl.c.age = d.grow; pl.c.ripe = true; if (d.tree) pl.c.grown = true; ripened[pl.c.k] = (ripened[pl.c.k] || 0) + 1; }
+    const pl = state.plots[key], c = pl.c;
+    if (c && !c.dead) {
+      const d = CROPS[c.k];
+      if (d.tree) {
+        /* the apple tree lives through every season; it grows up outside winter and bears fruit only in autumn */
+        if (changed && c.ripe && !d.fruit.includes(next)) { c.ripe = false; c.age = d.grow - d.regrow; }
+        if (before !== 'winter' && !c.ripe) {
+          if (!c.grown || d.fruit.includes(before)) { if (!pl.w) dry++; c.age += pl.w ? 1 : 0.5; }
+          if (c.age >= d.grow) {
+            c.age = d.grow; c.grown = true;
+            if (d.fruit.includes(next)) { c.ripe = true; ripened[c.k] = (ripened[c.k] || 0) + 1; }
+            else c.age = d.grow - d.regrow;
+          }
+        }
+      } else if (!c.ripe) {
+        if (!pl.w) dry++;
+        c.age += pl.w ? 1 : 0.5;
+        if (c.age >= d.grow) { c.age = d.grow; c.ripe = true; ripened[c.k] = (ripened[c.k] || 0) + 1; }
+      }
+      /* out of season the plant withers */
+      if (changed && !d.tree && !inSeason(c.k, next)) { c.dead = true; c.ripe = false; withered[c.k] = (withered[c.k] || 0) + 1; delete ripened[c.k]; }
     }
     pl.w = 0;
   }
   state.day++; state.min = 360; state.lateWarned = false;
+  /* snow: fresh snow covers yesterday's tracks; it melts when spring comes */
+  if (season().id === 'winter') { if (snowed) { state.snowCover = true; state.snowTrod = {}; } }
+  else { state.snowCover = false; state.snowTrod = {}; }
   state.px = 4; state.py = 4; state.face = 'down';
   player = makePlayer(); held.length = 0;
+  refreshLook();
   save();
-  openMorning(note, ripened, dry);
+  openMorning(note, ripened, dry, {changed, withered, snowed});
 }
 
 /* ---------- panels ---------- */
@@ -388,11 +433,12 @@ const HOW = `
     <li>Выберите семена и посадите их на вскопанную грядку.</li>
     <li>Полейте грядку из лейки. Воду набирают в колодце или пруду.</li>
     <li>Ночью растения подрастают. Без полива — вдвое медленнее.</li>
+    <li>Год делится на четыре сезона по ${SEASON_DAYS} дней. У каждой культуры свой сезон: когда он кончается, растение увядает. Зимой огород отдыхает, переживает её только яблоня.</li>
     <li>Спелый урожай соберите и продайте тёте Гале на рынке справа (палатка с полосатым навесом).</li>
     <li>Чтобы лечь спать и начать новый день, подойдите к двери дома.</li>
   </ol>
   <h3>Управление</h3>
-  <p class="small"><b>Клавиатура:</b> стрелки или WASD — ходить, Пробел или E — действие, 1–8 — выбрать предмет.<br>
+  <p class="small"><b>Клавиатура:</b> стрелки или WASD — ходить, Пробел или E — действие, 1–9, 0, − и = — выбрать предмет.<br>
   <b>Мышь и телефон:</b> нажмите на клетку — Тёма сам дойдёт и сделает действие выбранным предметом. Для точного управления на телефоне есть крестовина.</p>`;
 
 function openIntro() {
@@ -410,7 +456,7 @@ function openHelp() {
     if (b.dataset.act === 'reset') openPanel(`<h2>Начать заново?</h2><p>Весь прогресс сотрётся: деньги, грядки и покупки.</p>
       <div class="btns"><button class="btn warn" data-act="yes">Да, начать заново</button><button class="btn alt" data-close data-focus>Нет</button></div>`, b2 => {
       if (b2.dataset.act === 'yes') {
-        state = newState(); buildMap(); buildObjects(); player = makePlayer(); bgDirty = true; particles = []; save(); openIntro();
+        state = newState(); buildMap(); refreshLook(); player = makePlayer(); particles = []; save(); openIntro();
       }
     });
   });
@@ -422,13 +468,27 @@ function openSleep() {
     if (b.dataset.act === 'sleep') { SFX.plant(); newDay(''); }
   });
 }
-function openMorning(note, ripened, dry) {
+const SEASON_TEXT = {
+  spring:'Наступила весна! Снег сошёл, деревья просыпаются, на лугу зацветают цветы.',
+  summer:'Наступило лето! Тепло, всё зелёное, самое время для огурцов и помидоров.',
+  autumn:'Наступила осень! Листья скоро пожелтеют, а яблони дадут урожай.',
+  winter:'Наступила зима! Земля промёрзла, огород отдыхает до весны. Скоро выпадет снег.'
+};
+function openMorning(note, ripened, dry, ex = {}) {
   const list = Object.keys(ripened).map(k => CROPS[k].product + ' ×' + ripened[k]).join(', ');
+  const dead = Object.keys(ex.withered || {}).map(k => CROPS[k].name + ' ×' + ex.withered[k]).join(', ');
+  const s = season(), now = KEYS.filter(k => canPlant(k, s.id)).map(k => CROPS[k].name.toLowerCase());
   let best = KEYS[0]; KEYS.forEach(k => { if (factor(k) > factor(best)) best = k; });
-  openPanel(`<h2>День ${state.day}. Утро</h2>
+  const weather = weatherFor(state.day) === 'snow' ? '<p>Сегодня идёт снег.</p>' : '';
+  openPanel(`<h2>${s.name}, день ${s.d} из ${SEASON_DAYS}</h2>
+    ${ex.changed ? `<p><b>${SEASON_TEXT[s.id]}</b></p>` : ''}
+    ${ex.changed && dead ? `<p>Не пережили смену сезона: ${dead}. Уберите увядшие растения с грядок.</p>` : ''}
+    ${ex.changed && now.length ? `<p>В этом сезоне сажают: ${now.join(', ')}.</p>` : ''}
+    ${ex.snowed && s.id === 'winter' ? '<p>За ночь всё засыпало снегом.</p>' : ''}
+    ${weather}
     ${note ? `<p>${note}</p>` : ''}
     <p>${list ? 'За ночь созрело: ' + list + '.' : 'Пока ничего не созрело. Растения тянутся к солнцу.'}</p>
-    ${dry ? `<p>Без полива осталось грядок: ${dry}. Они росли вдвое медленнее.</p>` : ''}
+    ${dry ? `<p>Без полива осталось растений: ${dry}. Они росли вдвое медленнее.</p>` : ''}
     <p class="say">Тётя Галя кричит с рынка: «Сегодня хорошо берут: ${CROPS[best].product.toLowerCase()}, по ${price(best)} монет!»</p>
     <div class="btns"><button class="btn" data-close data-focus>Доброе утро!</button></div>`);
 }
@@ -464,7 +524,8 @@ function openShop(tab) {
     body += '<h3>Семена и саженцы</h3>';
     KEYS.forEach(k => {
       const d = CROPS[k];
-      const info = `${d.seed} мон. · растёт ${d.grow} ${plural(d.grow, 'день', 'дня', 'дней')}` + (d.regrow ? ` · потом урожай каждые ${d.regrow} дн.` : '') + ` · у вас ${state.seeds[k]}`;
+      const now = canPlant(k, season().id);
+      const info = `${d.seed} мон. · ${seasonNames(d.plant || d.seasons)}${now ? '' : ' (сейчас не сезон)'} · растёт ${d.grow} ${plural(d.grow, 'день', 'дня', 'дней')}` + (d.regrow ? `, потом урожай каждые ${d.regrow} дн.` : '') + (d.fruit ? ', плоды осенью' : '') + ` · у вас ${state.seeds[k]}`;
       body += `<div class="row"><span data-icon="seed:${k}"></span><div><div class="nm">${d.seedName}</div><div class="sub">${info}</div></div>
         <div class="acts"><button class="btn alt sm" data-buy="${k}:1" ${state.money < d.seed ? 'disabled' : ''}>+1</button><button class="btn sm" data-buy="${k}:5" ${state.money < d.seed * 5 ? 'disabled' : ''}>+5 за ${d.seed * 5}</button></div></div>`;
     });
@@ -544,7 +605,7 @@ const setText = (el, v) => { if (el.textContent !== v) el.textContent = v; };
 const els = {day:$('#day'), clock:$('#clock'), part:$('#part'), money:$('#money'), water:$('#water'), basket:$('#basket'), goalTxt:$('#goalTxt'), goalBar:$('#goalBar'), holding:$('#holding')};
 let beltSig = '';
 function hud() {
-  setText(els.day, 'День ' + state.day);
+  { const s = season(); setText(els.day, s.name + ', день ' + s.d + ' из ' + SEASON_DAYS); }
   setText(els.clock, clockText());
   setText(els.part, state.min < 720 ? 'утро' : state.min < 1080 ? 'день' : state.min < 1320 ? 'вечер' : 'ночь');
   setText(els.money, String(state.money));
@@ -552,7 +613,7 @@ function hud() {
   setText(els.basket, String(KEYS.reduce((s, k) => s + state.produce[k], 0)));
   if (state.house) { setText(els.goalTxt, 'Дом отремонтирован'); els.goalBar.style.width = '100%'; }
   else { setText(els.goalTxt, 'Ремонт дома: ' + Math.min(state.money, GOAL) + '/' + GOAL); els.goalBar.style.width = Math.min(100, state.money / GOAL * 100) + '%'; }
-  const sig = state.tool + '|' + state.water + '|' + state.cap + '|' + KEYS.map(k => state.seeds[k]).join(',');
+  const sig = state.day + '|' + state.tool + '|' + state.water + '|' + state.cap + '|' + KEYS.map(k => state.seeds[k]).join(',');
   if (sig !== beltSig) { beltSig = sig; updateBelt(); }
 }
 const belt = $('#belt'), slots = [];
@@ -562,7 +623,7 @@ function buildBelt() {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'slot'; b.title = t.name;
     b.append(iconCanvas(t.id === 'seed' ? 'seed' : t.id, t.k));
-    const key = document.createElement('span'); key.className = 'key'; key.textContent = i + 1;
+    const key = document.createElement('span'); key.className = 'key'; key.textContent = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '−', '='][i] || '';
     const n = document.createElement('span'); n.className = 'n';
     b.append(key, n);
     b.addEventListener('click', () => { state.tool = i; ensureAudio(); hud(); });
@@ -579,13 +640,14 @@ function updateBelt() {
     if (t.id === 'seed') label = String(state.seeds[t.k]);
     s.n.textContent = label;
     s.b.classList.toggle('none', t.id === 'seed' && state.seeds[t.k] === 0);
+    s.b.classList.toggle('off', t.id === 'seed' && !canPlant(t.k, season().id));
     s.b.setAttribute('aria-label', t.name + (label ? ', ' + label : ''));
   });
   const t = TOOLS[state.tool];
   let h = '';
   if (t.id === 'hoe') h = '<b>Мотыга</b> — вскопать землю на огороде';
   else if (t.id === 'can') h = `<b>Лейка</b> — ${state.water}/${state.cap} л. Полить грядку. Воду набирают в колодце или пруду`;
-  else { const d = CROPS[t.k]; h = `<b>${d.seedName}</b> — ${state.seeds[t.k]} шт. Посадить на вскопанную землю, растёт ${d.grow} ${plural(d.grow, 'день', 'дня', 'дней')}`; }
+  else { const d = CROPS[t.k]; h = `<b>${d.seedName}</b> — ${state.seeds[t.k]} шт. Сезон: ${seasonNames(d.plant || d.seasons)}${canPlant(t.k, season().id) ? '' : ' (сейчас не сезон)'}, растёт ${d.grow} ${plural(d.grow, 'день', 'дня', 'дней')}`; }
   els.holding.innerHTML = 'В руках: ' + h;
 }
 
@@ -607,10 +669,12 @@ function render(now) {
   const x1 = Math.min(W - 1, Math.floor((cam.x + viewW) / T)), y1 = Math.min(H - 1, Math.floor((cam.y + viewH) / T)), sec = now / 1000;
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     const ch = map[y][x], X = x * T, Y = y * T;
-    if (ch === '~') drawWater(ctx, x, y, sec, inMap(x, y - 1) && map[y - 1][x] !== '~');
+    const trod = state.snowCover && state.snowTrod[x + ',' + y];
+    if (trod && bgBare) { ctx.drawImage(bgBare, X, Y, T, T, X, Y, T, T); drawTrodden(ctx, x, y); }
+    if (ch === '~') drawWater(ctx, x, y, sec, inMap(x, y - 1) && map[y - 1][x] !== '~', look.ice);
     else if (ch === 'f') {
       const pl = state.plots[x + ',' + y];
-      if (pl && pl.t) drawSoil(ctx, X, Y, pl.w);
+      if (pl && pl.t && (!state.snowCover || trod)) drawSoil(ctx, X, Y, pl.w);
     }
   }
   if (!panelOpen && !p.moving) {
@@ -624,11 +688,11 @@ function render(now) {
   /* everything standing on the ground this frame */
   const list = [];
   const inView = (px, py) => px > cam.x - 96 && px < cam.x + viewW + 48 && py > cam.y - 8 && py < cam.y + viewH + 64;
-  objects.forEach(o => { if (inView(o.px, o.py)) list.push({o:sprite(o.kind, o.kind === 'house' ? state.house : o.a, o.b), px:o.px, py:o.py}); });
+  objects.forEach(o => { if (inView(o.px, o.py)) list.push({o:sprite(o.kind, o.kind === 'house' ? state.house : o.a, o.b, look), px:o.px, py:o.py}); });
   for (let y = y0; y <= Math.min(H - 1, y1 + 2); y++) for (let x = x0; x <= x1; x++) {
     if (map[y][x] !== 'f') continue;
     const pl = state.plots[x + ',' + y];
-    if (pl && pl.c) list.push({o:sprite('crop', pl.c.k, cropStage(pl.c)), px:x * T + T / 2, py:y * T + T});
+    if (pl && pl.c) list.push({o:pl.c.dead ? sprite('dead', 0, 0, look) : sprite('crop', pl.c.k, cropStage(pl.c), look), px:x * T + T / 2, py:y * T + T});
   }
   const frame = p.moving ? Math.floor(p.walk * 8) % 2 : 0;
   list.push({o:sprite('player', p.face, frame), px:Math.round(rx) + T / 2, py:Math.round(ry) + T, me:true});
@@ -645,10 +709,27 @@ function render(now) {
   list.forEach(it => ctx.drawImage(it.o.img, it.px - it.o.ax, it.py - it.o.ay));
   particles.forEach(q => { ctx.fillStyle = q.c; ctx.fillRect(Math.round(q.x), Math.round(q.y), 2, 2); });
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (weatherFor(state.day) === 'snow') drawSnowfall(now);
   applyLight(ctx, cv.width, cv.height, state.min);
+}
+/* falling snow, in screen space: one flake is one art pixel × 2 */
+let flakes = [];
+function drawSnowfall(now) {
+  const n = Math.round(cv.width * cv.height / (k * k * 2200));
+  while (flakes.length < n) flakes.push({x:Math.random(), y:Math.random(), v:.04 + Math.random() * .05, ph:Math.random() * 6});
+  flakes.length = n;
+  const dt = Math.min(.05, (now - (drawSnowfall.last || now)) / 1000); drawSnowfall.last = now;
+  const sz = Math.max(2, k * 2);
+  ctx.fillStyle = 'rgba(255,255,255,.9)';
+  flakes.forEach(f => {
+    if (!panelOpen) { f.y += f.v * dt; f.x += Math.sin(now / 900 + f.ph) * .004 * dt * 10; }
+    if (f.y > 1) { f.y -= 1; f.x = Math.random(); }
+    ctx.fillRect(Math.round(((f.x % 1) + 1) % 1 * cv.width), Math.round(f.y * cv.height), sz, sz);
+  });
 }
 
 /* ---------- input ---------- */
+const SLOT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus', 'Equal'];
 const KEYDIR = {ArrowUp:'up', KeyW:'up', ArrowDown:'down', KeyS:'down', ArrowLeft:'left', KeyA:'left', ArrowRight:'right', KeyD:'right'};
 function frontAct() { if (panelOpen || player.moving) return; const [x, y] = front(); act(x, y); }
 window.addEventListener('keydown', e => {
@@ -656,8 +737,8 @@ window.addEventListener('keydown', e => {
   const d = KEYDIR[e.code];
   if (d) { e.preventDefault(); ensureAudio(); if (!held.includes(d)) held.push(d); return; }
   if (e.code === 'Space' || e.code === 'KeyE') { e.preventDefault(); if (!e.repeat) frontAct(); return; }
-  const m = /^(?:Digit|Numpad)([1-8])$/.exec(e.code);
-  if (m) { state.tool = +m[1] - 1; hud(); }
+  const slot = SLOT_KEYS.indexOf(e.code.replace('Numpad', 'Digit'));
+  if (slot >= 0 && slot < TOOLS.length) { state.tool = slot; hud(); }
 });
 window.addEventListener('keyup', e => { const d = KEYDIR[e.code]; if (d) { const i = held.indexOf(d); if (i >= 0) held.splice(i, 1); } });
 window.addEventListener('blur', () => { held.length = 0; });
@@ -730,7 +811,7 @@ function loop(now) {
 }
 function start(data) {
   state = merge((data && data.state) || load());
-  resize(); buildMap(); buildObjects(); player = makePlayer(); buildBelt(); bgDirty = true;
+  resize(); buildMap(); refreshLook(); player = makePlayer(); buildBelt();
   if (window.claude && window.claude.hot && window.claude.hot.snapshot) window.claude.hot.snapshot(() => ({state:snap()}));
   if (!state.intro) openIntro(); else toast('С возвращением! День ' + state.day + '.');
   requestAnimationFrame(loop);

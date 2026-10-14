@@ -165,10 +165,13 @@ function sprite(w, h, fn) {
 }
 function sizeCanvas(c) { c.style.width = c.dataset.w * zoom + 'px'; c.style.height = c.dataset.h * zoom + 'px'; }
 const fig = (canvas, cap) => { const f = document.createElement('figure'); f.append(canvas); if (cap) { const fc = document.createElement('figcaption'); fc.textContent = cap; f.append(fc); } return f; };
-const obj = (kind, a, b) => { const o = S.sprite(kind, a, b); return sprite(o.w, o.h, g => g.drawImage(o.img, 0, 0)); };
+const obj = (kind, a, b, L) => { const o = S.sprite(kind, a, b, L); return sprite(o.w, o.h, g => g.drawImage(o.img, 0, 0)); };
 
 /* ---------- catalogue ---------- */
 const STAGES = ['семя', 'росток', 'куст', 'урожай'];
+const SEASON_RU = list => list.map(id => ({spring:'весна', summer:'лето', autumn:'осень', winter:'зима'})[id]).join(', ');
+/* looks for the seasons card: a day in each part of the year */
+const LOOKS = [[2, 'весна, 2-й день'], [7, 'весна, 7-й день'], [18, 'лето'], [29, 'осень, 5-й день'], [34, 'осень, 10-й день'], [40, 'зима, снег']].map(([d, n]) => [S.lookFor(d, d > 36), n]);
 const SECTIONS = [
   {id:'characters', title:'Персонажи', desc:'Герой и жители деревни. Пока их двое: Тёма и тётя Галя.', items:[
     {id:'tema', name:'Тёма', meta:'16 × 24 (будет 32 × 48) · 4 направления × 2 кадра ходьбы', wide:true, figs:() =>
@@ -179,7 +182,7 @@ const SECTIONS = [
     }}
   ]},
   {id:'plants', title:'Растения', desc:'Каждая культура растёт в четыре стадии. Яблоня выше остальных и после первого урожая остаётся деревом.', items:
-    KEYS.map(k => ({id:k, name:CROPS[k].name, meta:(k === 'apple' ? 'от 16 × 16 до 32 × 44' : k === 'tomato' || k === 'carrot' || k === 'potato' ? '16 × 16, куст выше клетки' : '16 × 16') + ` · растёт ${CROPS[k].grow} дн.` + (CROPS[k].regrow ? `, плодоносит каждые ${CROPS[k].regrow} дн.` : ''), wide:true,
+    KEYS.map(k => ({id:k, name:CROPS[k].name, meta:SEASON_RU(CROPS[k].plant || CROPS[k].seasons) + ` · растёт ${CROPS[k].grow} дн.` + (CROPS[k].regrow ? `, потом каждые ${CROPS[k].regrow} дн.` : '') + (CROPS[k].fruit ? ', плоды осенью' : ''), wide:true,
       figs:() => [0, 1, 2, 3].map(st => fig(sprite(32, 44, g => { S.drawSoil(g, 8, 28, false); g.drawImage(S.sprite('crop', k, st).img, 0, 0); }), k === 'apple' ? ['саженец', 'молодая', 'взрослая', 'с яблоками'][st] : STAGES[st]))}))
   },
   {id:'items', title:'Предметы', desc:'Иконки в поясе инструментов и на рынке. Рисуются в клетке 16 × 16, в игре показываются вдвое крупнее.', items:[
@@ -205,6 +208,15 @@ const SECTIONS = [
     {id:'farm', name:'Огород', meta:'16 × 16 · от заросшей земли до политой грядки', wide:true, figs:() => [
       fig(sprite(16, 16, g => S.drawLocked(g, 0, 0)), 'камни'), fig(sprite(16, 16, g => S.drawLocked(g, 3, 1)), 'сорняки'), fig(sprite(16, 16, g => S.drawLocked(g, 2, 5)), 'пень'),
       fig(sprite(16, 16, g => S.drawDirt(g, 0, 0)), 'расчищено'), fig(sprite(16, 16, g => { S.drawDirt(g, 0, 0); S.drawSoil(g, 0, 0, false); }), 'вскопано'), fig(sprite(16, 16, g => { S.drawDirt(g, 0, 0); S.drawSoil(g, 0, 0, true); }), 'полито')]}
+  ]},
+  {id:'seasons', title:'Сезоны', desc:'Год делится на четыре сезона по 12 дней. Весной деревья голые и к концу сезона обрастают листвой, в середине весны цветут; летом всё зелёное; осенью листва желтеет и опадает; зимой выпадает снег, и Тёма протаптывает в нём дорожки.', items:[
+    {id:'season-trees', name:'Деревья по сезонам', meta:'листва растёт, желтеет и опадает по дням сезона', wide:true, figs:() => LOOKS.map(([L, n]) => fig(sprite(32, 40, g => g.drawImage(S.sprite('tree', 0, 0, L).img, 0, 0)), n))},
+    {id:'season-apple', name:'Яблоня по сезонам', meta:'цветёт весной, плоды только осенью', wide:true, figs:() => LOOKS.map(([L, n]) => fig(sprite(32, 44, g => g.drawImage(S.sprite('crop', 'apple', L.season === 'autumn' && L.d < 9 ? 3 : 2, L).img, 0, 0)), n))},
+    {id:'season-bush', name:'Кусты и цветы', meta:'весной цветут, летом ягоды, осенью вянут, зимой голые', wide:true, figs:() => LOOKS.map(([L, n]) => fig(sprite(32, 16, g => { for (let x = 0; x < 2; x++) L.snow ? S.drawSnow(g, x, 0) : S.drawGrass(g, x, 0, L.grass); g.drawImage(S.sprite('bush', 0, 0, L).img, 0, 0); if (L.flowers !== 'none' && !L.snow) g.drawImage(S.sprite('flower', 3, 1, L).img, 16, 0); }), n))},
+    {id:'season-ground', name:'Земля по сезонам', meta:'трава, опавшие листья, снег, протоптанный снег, лёд', wide:true, figs:() => [
+      ...LOOKS.slice(0, 5).map(([L, n]) => fig(sprite(16, 16, g => { S.drawGrass(g, 0, 0, L.grass); if (L.fallen) S.drawFallen(g, 0, 0, L.fallen); }), n)),
+      fig(sprite(16, 16, g => S.drawSnow(g, 0, 0)), 'снег'), fig(sprite(16, 16, g => { S.drawPath(g, 0, 0); S.drawTrodden(g, 0, 0); }), 'протоптано'), fig(sprite(16, 16, g => S.drawWater(g, 0, 0, 0, true, true)), 'лёд')]},
+    {id:'season-snow', name:'Постройки под снегом', meta:'снег ложится на все поверхности, обращённые вверх', wide:true, figs:() => [fig(obj('house', true, undefined, LOOKS[5][0]), 'дом'), fig(obj('well', 0, 0, LOOKS[5][0]), 'колодец'), fig(obj('fence', 3, 0, LOOKS[5][0]), 'забор')]}
   ]},
   {id:'ui', title:'Интерфейс', desc:'Панели, ячейки и шрифты в стиле Террарии: синие окна, золотые рамки, белый текст с тёмной тенью. Заголовки набраны пиксельным шрифтом Press Start 2P, остальной текст — Rubik.', items:[
     {id:'ui-colors', name:'Цвета интерфейса', meta:'фон, панели, рамки, акценты', wide:true, figs:() => [['#0f1638', 'ночное небо'], ['#2c3c8c', 'панель'], ['#3d4fa8', 'ячейка'], ['#151b4a', 'рамка'], ['#ffd24a', 'золото'], ['#2f9e3a', 'кнопка']].map(([c, n]) => fig(sprite(8, 8, g => { g.fillStyle = c; g.fillRect(0, 0, 8, 8); }), n))},
