@@ -404,11 +404,15 @@ function iconCanvas(kind, k) {
   const c = document.createElement('canvas'); c.width = 16; c.height = 16;
   const g = c.getContext('2d'), P = painter(g, 0, 0);
   if (kind === 'hoe') {
-    for (let i = 0; i < 10; i++) P(2 + i, 13 - i, 2, 2, C.trunk);
-    P(9, 1, 6, 3, '#9aa3ad'); P(12, 4, 3, 3, '#9aa3ad'); P(9, 1, 6, 1, '#c9d0d6');
+    /* hoe: a long thin handle leaning the other way, a flat blade bent down at its tip */
+    for (let i = 0; i < 12; i++) P(13 - i, 15 - i, 1, 1, C.trunk);
+    for (let i = 0; i < 11; i++) P(13 - i, 14 - i, 1, 1, '#a97c50');
+    P(0, 3, 5, 2, '#6f777f'); P(0, 5, 5, 3, '#9aa3ad'); P(0, 7, 5, 1, '#c9d0d6');
   } else if (kind === 'axe') {
-    for (let i = 0; i < 10; i++) P(3 + i, 14 - i, 2, 2, C.trunk);
-    P(9, 1, 4, 7, '#9aa3ad'); P(12, 2, 3, 5, '#9aa3ad'); P(14, 3, 1, 3, '#c9d0d6'); P(9, 1, 4, 1, '#c9d0d6');
+    /* axe: a short thick handle and a broad wedge head with a curved edge */
+    for (let i = 0; i < 9; i++) P(4 + i, 15 - i, 2, 2, C.trunk);
+    P(9, 2, 3, 7, '#6f777f'); P(12, 1, 2, 9, '#9aa3ad'); P(14, 2, 2, 7, '#c9d0d6'); P(12, 0, 2, 1, '#9aa3ad'); P(12, 10, 2, 1, '#9aa3ad');
+    P(9, 2, 3, 1, '#9aa3ad');
   } else if (kind === 'pick') {
     /* double pickaxe: a straight handle and a head pointing both ways */
     P(7, 4, 2, 12, C.trunk); P(7, 4, 1, 12, C.trunkD);
