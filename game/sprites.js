@@ -94,6 +94,21 @@ function drawField(g, x, y, look, type) {
     P(c, top + 2, 1, 14 - top, stalk); P(c, top, 1, 3, head);
   }
 }
+/* a ditch with water and reeds: a natural edge of the walkable world */
+function drawDitch(g, x, y, ice) {
+  const P = painter(g, x * T, y * T);
+  P(0, 0, 16, 16, '#4f7a36'); P(0, 4, 16, 8, '#5e4a2e'); P(0, 6, 16, 4, ice ? '#b9dcf2' : '#2f5fb8'); P(0, 6, 16, 1, ice ? '#ffffff' : '#6a98f4');
+  for (let i = 0; i < 4; i++) { const rx = Math.floor(hash(x, y, i + 300) * 14); P(rx, 1 + (i % 2) * 10, 1, 4, '#3f8a2f'); P(rx, 1 + (i % 2) * 10, 1, 1, '#8a6a3a'); }
+}
+/* market square cobbles */
+function drawCobbles(g, x, y) {
+  const P = painter(g, x * T, y * T);
+  P(0, 0, 16, 16, '#a8a294');
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 2; c++) {
+    const ox = (r % 2) * 4 + c * 8;
+    P(ox + 1, r * 4 + 1, 6, 3, hash(x * 4 + c, y * 4 + r, 310) < .5 ? '#bdb6a6' : '#b2ab9b');
+  }
+}
 /* wooden bridge planks over the river; side: 0 left half, 1 right half */
 function drawBridge(g, x, y, side) {
   const P = painter(g, x * T, y * T);
@@ -323,6 +338,74 @@ function drawHaystack(g) {
   P(2, 8, 20, 10, '#d9b84a'); P(4, 4, 16, 5, '#d9b84a'); P(7, 1, 10, 4, '#e8cc6a'); P(10, 0, 4, 1, '#e8cc6a');
   P(2, 16, 20, 2, '#a8862a'); P(18, 6, 4, 10, '#b8962a');
   for (let i = 0; i < 7; i++) P(4 + i * 2.5 | 0, 6 + (i % 3) * 3, 1, 3, '#f0dc8a');
+}
+/* ---------- market ---------- */
+/* a trader: 10 × 14, standing behind a counter. who: 'fruit', 'veg', 'berry', 'any' */
+const TRADER = {
+  fruit:{skin:'#f0c29a', hair:'#8a8a8a', top:'#3f8a3a', apron:'#f2e6bf', hat:null, beard:true},
+  veg:  {skin:'#f0c29a', hair:'#7a4a22', top:'#5b8fd6', apron:'#f2e6bf', hat:'#d6455a', beard:false},
+  berry:{skin:'#f5d0b0', hair:'#c0563a', top:'#9a4ad6', apron:'#ffd6e8', hat:null, beard:false, braid:true},
+  any:  {skin:'#d9a27a', hair:'#2b1f16', top:'#6b4627', apron:null, hat:'#3a3a5a', beard:true}
+};
+function drawTrader(P, ox, oy, who, side) {
+  const t = TRADER[who];
+  P(ox + 1, oy + 7, 8, 7, t.top); if (t.apron) P(ox + 3, oy + 8, 4, 6, t.apron);
+  P(ox + 2, oy, 6, 7, t.skin);
+  if (side) { P(ox + 6, oy + 3, 1, 1, C.ink); P(ox + 2, oy, 3, 4, t.hair); }
+  else { P(ox + 3, oy + 3, 1, 1, C.ink); P(ox + 6, oy + 3, 1, 1, C.ink); P(ox + 2, oy, 6, 2, t.hair); }
+  if (t.beard) P(ox + 2, oy + 5, 6, 2, t.hair);
+  if (t.braid) P(ox + 7, oy + 2, 2, 7, t.hair);
+  if (t.hat) { P(ox + 1, oy - 1, 8, 2, t.hat); P(ox + 2, oy - 3, 6, 2, t.hat); }
+}
+/* goods laid out on a counter */
+function drawGoods(P, x, y, who, n) {
+  const sets = {fruit:['#cf2f2f', '#8fd65a', '#f2d14a'], veg:['#e8832a', '#3f9a3a', '#e0402c', '#c49a62'], berry:['#d63b45', '#8a5a33', '#9a4ad6'], any:['#efe0b4', '#c99a66', '#efe0b4']}[who];
+  for (let i = 0; i < n; i++) { P(x + i * 6, y, 5, 4, '#7a5230'); P(x + i * 6 + 1, y - 1, 3, 2, sets[i % sets.length]); P(x + i * 6 + 2, y - 2, 1, 1, sets[(i + 1) % sets.length]); }
+}
+const AWNING = {fruit:['#c7432f', '#f2e6bf'], veg:['#3f8a3a', '#f2e6bf'], berry:['#7a3aa8', '#f2e6bf'], any:['#5a3a8a', '#ffd24a'], empty:['#8a7a6a', '#b8ab98']};
+/* stall facing down, 64 × 48 (4 × 3 tiles). Closed or empty: shutters down, nobody inside */
+function drawStall(g, who, open) {
+  const P = painter(g, 0, 0), [a1, a2] = AWNING[who];
+  P(2, 12, 60, 22, '#8b6a45'); for (let x = 2; x < 62; x += 8) P(x, 12, 1, 22, '#6f5235');
+  P(2, 10, 4, 38, C.fenceD); P(58, 10, 4, 38, C.fenceD);
+  for (let i = 0; i < 8; i++) { const c = i % 2 ? a2 : a1; P(i * 8, 0, 8, 10, c); P(i * 8 + 1, 10, 6, 2, c); P(i * 8 + 2, 12, 4, 1, c); }
+  P(0, 0, 64, 1, '#3a2a1f');
+  if (open && who !== 'empty') drawTrader(P, 27, 16, who, false);
+  else { P(6, 14, 52, 16, '#6f5235'); for (let y = 16; y < 30; y += 3) P(6, y, 52, 1, '#5a4228'); }
+  P(0, 30, 64, 18, C.fence); P(0, 30, 64, 3, C.fenceL); P(0, 39, 64, 1, C.fenceD); P(0, 46, 64, 2, C.fenceD);
+  if (open && who !== 'empty') { drawGoods(P, 4, 28, who, 3); drawGoods(P, 42, 28, who, 3); }
+  if (who === 'empty') { P(22, 36, 20, 7, '#f2e6bf'); P(24, 38, 16, 1, '#8a6a3a'); P(24, 40, 12, 1, '#8a6a3a'); }
+}
+/* stall on the left side of the square, facing right: 48 × 64 (3 × 4 tiles) */
+function drawStallSide(g, who, open) {
+  const P = painter(g, 0, 0), [a1, a2] = AWNING[who];
+  P(0, 4, 12, 56, '#8b6a45'); for (let y = 4; y < 60; y += 8) P(0, y, 12, 1, '#6f5235');
+  for (let i = 0; i < 8; i++) P(0, 2 + i * 7, 18, 7, i % 2 ? a2 : a1);
+  P(18, 2, 2, 56, '#3a2a1f');
+  if (open && who !== 'empty') drawTrader(P, 20, 24, who, true);
+  P(32, 12, 14, 50, C.fence); P(32, 12, 3, 50, C.fenceL); P(44, 12, 2, 50, C.fenceD); P(32, 60, 14, 2, C.fenceD);
+  if (open && who !== 'empty') for (let i = 0; i < 4; i++) { P(35, 16 + i * 11, 8, 6, '#7a5230'); P(36, 15 + i * 11, 6, 3, {berry:['#d63b45', '#8a5a33'], fruit:['#cf2f2f', '#8fd65a'], veg:['#e8832a', '#3f9a3a'], any:['#efe0b4', '#c99a66']}[who][i % 2]); }
+  P(2, 58, 4, 6, C.fenceD); P(40, 58, 4, 6, C.fenceD);
+}
+/* back of a stall on the bottom row of the square (a free place for a future trader), 64 × 40 */
+function drawStallBack(g) {
+  const P = painter(g, 0, 0), [a1, a2] = AWNING.empty;
+  for (let i = 0; i < 8; i++) P(i * 8, 0, 8, 14, i % 2 ? a2 : a1);
+  P(0, 14, 64, 2, '#3a2a1f');
+  P(2, 16, 60, 22, '#8b6a45'); for (let x = 2; x < 62; x += 8) P(x, 16, 1, 22, '#6f5235'); P(2, 36, 60, 2, '#5a4228');
+  P(2, 16, 4, 24, C.fenceD); P(58, 16, 4, 24, C.fenceD);
+}
+/* the universal trader's tent in the middle of the square, 64 × 64 */
+function drawTent(g, open) {
+  const P = painter(g, 0, 0), [a1, a2] = AWNING.any;
+  for (let r = 0; r < 26; r++) { const w = 8 + r * 2; for (let x = 0; x < w; x++) P(32 - w / 2 + x, r + 2, 1, 1, Math.floor((x - w / 2) / Math.max(2, w / 8) + 8) % 2 ? a2 : a1); }
+  P(31, 0, 2, 3, '#3a2a1f'); P(33, 0, 4, 2, '#ffd24a');
+  P(4, 28, 56, 26, a1); for (let x = 4; x < 60; x += 8) P(x, 28, 4, 26, a2);
+  P(18, 30, 28, 24, open ? '#2a1c3a' : a1);
+  if (open) { P(16, 30, 4, 24, '#7a5aa8'); P(44, 30, 4, 24, '#7a5aa8'); drawTrader(P, 27, 34, 'any', false); }
+  P(10, 50, 44, 10, C.fence); P(10, 50, 44, 2, C.fenceL); P(10, 58, 44, 2, C.fenceD);
+  if (open) drawGoods(P, 13, 49, 'any', 6);
+  P(4, 54, 3, 10, C.fenceD); P(57, 54, 3, 10, C.fenceD);
 }
 /* wooden sign on two posts */
 function drawSign(g) {
@@ -703,6 +786,10 @@ function sprite(kind, a, b, look = SUMMER) {
     case 'scarecrow': return cached('scarecrow' + (look.snow ? 's' : ''), 16, 28, 8, 28, g => { drawScarecrow(g); sn(g); });
     case 'sunflower': return cached('sunflower' + a, 14, 26, 7, 26, g => drawSunflower(g, a));
     case 'haystack':  return cached('haystack' + (look.snow ? 's' : ''), 24, 18, 12, 18, g => { drawHaystack(g); sn(g); });
+    case 'stall':     return cached('stall' + a + b + (look.snow ? 's' : ''), 64, 48, 0, 48, g => { drawStall(g, a, b); sn(g); });
+    case 'stallside': return cached('stallside' + a + b + (look.snow ? 's' : ''), 48, 64, 0, 64, g => { drawStallSide(g, a, b); sn(g); });
+    case 'stallback': return cached('stallback' + (look.snow ? 's' : ''), 64, 40, 0, 40, g => { drawStallBack(g); sn(g); });
+    case 'tent':      return cached('tent' + b + (look.snow ? 's' : ''), 64, 64, 0, 64, g => { drawTent(g, b); sn(g); });
     case 'stake':   return cached('stake' + (look.snow ? 's' : ''), 8, 14, 3, 14, g => { drawStake(g); sn(g); });
     case 'sign':    return cached('sign' + (look.snow ? 's' : ''), 16, 18, 8, 18, g => { drawSign(g); sn(g); });
     case 'market': return cached('market' + lk, 80, 48, 0, 48, g => { drawMarket(g, 0, 0); sn(g); });
@@ -781,6 +868,6 @@ function applyLight(g, w, h, min) {
 }
 
 
-return {T, C, CROPS, SEASONS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, drawSite, drawField, drawBridge, clearCache, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, drawProduce, iconCanvas, drawPlayer,
+return {T, C, CROPS, SEASONS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, drawSite, drawField, drawBridge, drawDitch, drawCobbles, clearCache, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, drawProduce, iconCanvas, drawPlayer,
   decoKind, fenceMask, sprite, silhouette, sunAt, castShadow, tintAt, applyLight};
 })();

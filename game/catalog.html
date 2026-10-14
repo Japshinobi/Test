@@ -194,12 +194,15 @@ const SECTIONS = [
   ]},
   {id:'objects', title:'Постройки и объекты', desc:'Всё, что стоит на карте и мешает пройти: дом, рынок, колодец, деревья, кусты, забор.', items:[
     {id:'house', name:'Дедушкин дом', meta:'64 × 60, стоит на 4 × 3 клетках · до и после ремонта', wide:true, figs:() => [fig(obj('house', false), 'старый'), fig(obj('house', true), 'после ремонта')]},
-    {id:'market', name:'Рынок тёти Гали', meta:'80 × 48 · пока убран из игры, вернётся вместе с продавцом', wide:true, figs:() => [fig(obj('market'), '')]},
+    {id:'market', name:'Старый рынок тёти Гали', meta:'80 × 48 · не используется: рынок теперь отдельная локация', wide:true, figs:() => [fig(obj('market'), '')]},
     {id:'debris', name:'Камни, ветки и пни', meta:'камень 16 × 12 (кирка, 2 удара) · ветки 16 × 8 (топор, 1 удар) · пень 16 × 10 (топор, 2 удара)', wide:true, figs:() => [fig(obj('rock'), 'камень'), fig(obj('twigs'), 'ветки'), fig(obj('stump'), 'пень')]},
     {id:'bigtree', name:'Старый дуб', meta:'48 × 64 · перегораживает дорогу справа от огорода', figs:() => [fig(obj('bigtree'), '')]},
     {id:'crossroads', name:'Перекрёсток', meta:'шлагбаумы 32 × 18 и 14 × 36 · указатель 18 × 26 · пугало 16 × 28 · подсолнух 14 × 26 · стог 24 × 18', wide:true, figs:() => [
       fig(obj('barrier', 'h'), 'шлагбаум'), fig(obj('barrier', 'v'), 'шлагбаум'), fig(obj('signpost'), 'указатель'), fig(obj('scarecrow'), 'пугало'),
       fig(obj('sunflower', 0), 'подсолнух'), fig(obj('sunflower', 1), 'цветёт'), fig(obj('sunflower', 2), 'осенью'), fig(obj('haystack'), 'стог')]},
+    {id:'market-stalls', name:'Рынок: прилавки', meta:'прилавок 64 × 48 · боковой 48 × 64 · задняя сторона 64 × 40 · палатка 64 × 64; ночью и в выходной торговцев нет', wide:true, figs:() => [
+      fig(obj('stall', 'fruit', true), 'фрукты'), fig(obj('stall', 'veg', true), 'овощи'), fig(obj('stallside', 'berry', true), 'ягоды и грибы'),
+      fig(obj('tent', 'any', true), 'универсальный'), fig(obj('stall', 'empty', false), 'свободно'), fig(obj('stallback'), 'свободно, сзади'), fig(obj('stall', 'veg', false), 'закрыто')]},
     {id:'well', name:'Колодец', meta:'16 × 28, навес выше клетки', figs:() => [fig(obj('well'), '')]},
     {id:'tree', name:'Деревья и куст', meta:'32 × 40, крона шире и выше клетки · куст 20 × 16', wide:true, figs:() => [fig(obj('tree', 0), 'раскидистое'), fig(obj('tree', 1), 'высокое'), fig(obj('bush'), 'куст')]},
     {id:'yard', name:'Двор и стройплощадки', wide:true, meta:'ящик для отгрузки 16 × 16 · почтовый ящик 12 × 22 · табличка 16 × 18 · колышек 8 × 14 · площадка под постройку', figs:() => [fig(obj('bin'), 'отгрузка'), fig(obj('mailbox'), 'почта'), fig(obj('sign'), 'табличка'), fig(obj('stake'), 'колышек'), fig(sprite(32, 16, g => { S.drawSite(g, 0, 0); S.drawSite(g, 1, 0); }), 'стройплощадка')]},
@@ -224,6 +227,7 @@ const SECTIONS = [
       ...LOOKS.slice(0, 5).map(([L, n]) => fig(sprite(16, 16, g => { S.drawGrass(g, 0, 0, L.grass); if (L.fallen) S.drawFallen(g, 0, 0, L.fallen); }), n)),
       ...LOOKS.slice(0, 5).map(([L, n]) => fig(sprite(16, 16, g => S.drawField(g, 0, 0, L, 'wheat')), 'поле: ' + n)),
       fig(sprite(32, 16, g => { S.drawBridge(g, 0, 0, 0); S.drawBridge(g, 1, 0, 1); }), 'мост'),
+      fig(sprite(16, 16, g => S.drawDitch(g, 0, 0, false)), 'канава'), fig(sprite(16, 16, g => S.drawCobbles(g, 0, 0)), 'брусчатка'),
       fig(sprite(16, 16, g => S.drawSnow(g, 0, 0)), 'снег'), fig(sprite(16, 16, g => { S.drawPath(g, 0, 0); S.drawTrodden(g, 0, 0); }), 'протоптано'), fig(sprite(16, 16, g => S.drawWater(g, 0, 0, 0, true, true)), 'лёд')]},
     {id:'season-snow', name:'Постройки под снегом', meta:'снег ложится на все поверхности, обращённые вверх', wide:true, figs:() => [fig(obj('house', true, undefined, LOOKS[5][0]), 'дом'), fig(obj('well', 0, 0, LOOKS[5][0]), 'колодец'), fig(obj('fence', 3, 0, LOOKS[5][0]), 'забор')]}
   ]},
