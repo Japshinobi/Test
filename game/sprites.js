@@ -61,6 +61,12 @@ function drawTrodden(g, x, y) {
   }
   P(5, 4, 2, 3, 'rgba(90,110,140,.25)'); P(9, 9, 2, 3, 'rgba(90,110,140,.25)');
 }
+/* building site: packed earth, ready for a future building */
+function drawSite(g, x, y) {
+  const P = painter(g, x * T, y * T);
+  P(0, 0, 16, 16, '#a07a52');
+  for (let i = 0; i < 6; i++) P(Math.floor(hash(x, y, i + 210) * 15), Math.floor(hash(x, y, i + 220) * 15), 1, 1, i % 2 ? '#86623e' : '#b8946a');
+}
 /* fallen leaves lying on the grass in autumn */
 function drawFallen(g, x, y, amount) {
   const P = painter(g, x * T, y * T), cols = ['#e0a02a', '#d9662a', '#f5d04a', '#a8601a'], n = Math.round(amount * 5);
@@ -193,6 +199,11 @@ function drawMailbox(g) {
   P(5, 9, 2, 13, C.trunk); P(5, 9, 1, 13, C.trunkD); P(3, 20, 6, 2, C.trunk);
   P(1, 2, 10, 7, '#3d6fd6'); P(2, 1, 8, 1, '#3d6fd6'); P(1, 2, 10, 1, '#6f98f0'); P(1, 8, 10, 1, '#284a9a');
   P(3, 5, 6, 1, '#1c2f6a'); P(10, 1, 1, 6, '#f0bf45'); P(11, 1, 2, 2, '#e0402c');
+}
+/* corner stake of a building site, with a red ribbon */
+function drawStake(g) {
+  const P = painter(g, 0, 0);
+  P(2, 2, 2, 12, C.trunk); P(2, 2, 1, 12, C.trunkD); P(1, 1, 4, 2, '#c99a66'); P(4, 4, 3, 2, '#e0402c'); P(5, 6, 2, 1, '#b8301e');
 }
 /* wooden sign on two posts */
 function drawSign(g) {
@@ -532,6 +543,7 @@ function sprite(kind, a, b, look = SUMMER) {
     });
     case 'bin':     return cached('bin' + (look.snow ? 's' : ''), 16, 16, 8, 16, g => { drawBin(g); sn(g); });
     case 'mailbox': return cached('mailbox' + (look.snow ? 's' : ''), 12, 22, 6, 22, g => { drawMailbox(g); sn(g); });
+    case 'stake':   return cached('stake' + (look.snow ? 's' : ''), 8, 14, 3, 14, g => { drawStake(g); sn(g); });
     case 'sign':    return cached('sign' + (look.snow ? 's' : ''), 16, 18, 8, 18, g => { drawSign(g); sn(g); });
     case 'market': return cached('market' + lk, 80, 48, 0, 48, g => { drawMarket(g, 0, 0); sn(g); });
     case 'player': return cached('player' + a + b, 16, 24, 8, 24, g => drawPlayer(g, 0, 0, a, b));
@@ -609,6 +621,6 @@ function applyLight(g, w, h, min) {
 }
 
 
-return {T, C, CROPS, SEASONS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, clearCache, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, drawProduce, iconCanvas, drawPlayer,
+return {T, C, CROPS, SEASONS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, drawSite, clearCache, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, drawProduce, iconCanvas, drawPlayer,
   decoKind, fenceMask, sprite, silhouette, sunAt, castShadow, tintAt, applyLight};
 })();

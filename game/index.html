@@ -165,7 +165,7 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-const {C, CROPS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, clearCache, hash, drawGrass, drawPath, drawDirt, decoKind, fenceMask, cropStage, drawSoil, drawWater, iconCanvas, sprite, sunAt, castShadow, applyLight} = window.OgorodSprites;
+const {C, CROPS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, drawSite, clearCache, hash, drawGrass, drawPath, drawDirt, decoKind, fenceMask, cropStage, drawSoil, drawWater, iconCanvas, sprite, sunAt, castShadow, applyLight} = window.OgorodSprites;
 const KEYS = Object.keys(CROPS);
 const TOOLS = [{id:'hoe', name:'Мотыга'}, {id:'can', name:'Лейка'}, ...KEYS.map(k => ({id:'seed', k, name:CROPS[k].seedName}))];
 const UPGRADES = [
@@ -173,7 +173,7 @@ const UPGRADES = [
   {id:'house', name:'Отремонтировать дом', sub:'Главная цель: вернуть дому жизнь', cost:GOAL}
 ];
 const DIRS = {up:[0,-1], down:[0,1], left:[-1,0], right:[1,0]};
-const WALK = '.,=', INTERACT = 'DWSX~HI';
+const WALK = '.,=P', INTERACT = 'DWSX~HI';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -183,7 +183,7 @@ function newState() {
   KEYS.forEach(k => { seeds[k] = 0; produce[k] = 0; });
   seeds.radish = 6; seeds.potato = 3;
   return {v:1, day:1, min:360, money:100, water:10, cap:10, house:false, loc:'farm', shipped:{},
-          plots:{}, seeds, produce, tool:0, px:4, py:5, face:'down', intro:false, lateWarned:false, snowCover:false, snowTrod:{}};
+          plots:{}, seeds, produce, tool:0, px:14, py:9, face:'down', mapV:2, intro:false, lateWarned:false, snowCover:false, snowTrod:{}};
 }
 function merge(s) {
   const b = newState();
@@ -195,6 +195,7 @@ function merge(s) {
   o.snowTrod = s.snowTrod && typeof s.snowTrod === 'object' ? s.snowTrod : {};
   o.shipped = s.shipped && typeof s.shipped === 'object' ? s.shipped : {};
   if (!LOCATIONS[o.loc]) o.loc = 'farm';
+  o.mapV = s.mapV;  /* a save from before the big farm has none: start() moves its beds */
   return o;
 }
 let state, player, map = [], bg = null, bgDirty = true, panelOpen = false, panelHandler = null, panelClosable = true;
@@ -219,15 +220,19 @@ const seasonNames = list => list.map(id => ({spring:'весна', summer:'лет
 /* Every location is its own map. Exits are path tiles on the map edge: stepping onto one fades over to the next location.
    at: where Тёма appears there. */
 const LOCATIONS = {
-  farm:   {name:'Дедушкин огород', W:36, H:22, build:buildFarm, exits:[
-            {x0:12, x1:13, y0:0, y1:0, to:'forest', at:[14, 18], face:'up'},
-            {x0:9, x1:10, y0:21, y1:21, to:'river', at:[14, 1], face:'down'},
-            {x0:35, x1:35, y0:15, y1:16, to:'road', at:[1, 7], face:'right'}]},
-  forest: {name:'Лес', W:30, H:20, build:buildForest, exits:[{x0:14, x1:15, y0:19, y1:19, to:'farm', at:[12, 1], face:'down'}],
+  farm:   {name:'Дедушкин огород', W:72, H:44, build:buildFarm, exits:[
+            {x0:24, x1:25, y0:0, y1:0, to:'forest', at:[14, 18], face:'up'},
+            {x0:30, x1:31, y0:43, y1:43, to:'river', at:[14, 1], face:'down'},
+            {x0:71, x1:71, y0:24, y1:25, to:'road', at:[1, 7], face:'right'}],
+           signs:{'7,18':'Место под теплицу. Здесь можно будет построить теплицу и выращивать культуры круглый год.',
+                  '44,26':'Место под постройку: курятник или хлев, на выбор.',
+                  '52,26':'Место под постройку: курятник или хлев, на выбор.',
+                  '60,26':'Место под постройку: курятник или хлев, на выбор.'}},
+  forest: {name:'Лес', W:30, H:20, build:buildForest, exits:[{x0:14, x1:15, y0:19, y1:19, to:'farm', at:[24, 1], face:'down'}],
            signs:{'16,15':'Лес. Скоро здесь можно будет собирать грибы, ягоды и хворост.'}},
-  river:  {name:'Речка', W:30, H:18, build:buildRiver, exits:[{x0:14, x1:15, y0:0, y1:0, to:'farm', at:[9, 20], face:'up'}],
+  river:  {name:'Речка', W:30, H:18, build:buildRiver, exits:[{x0:14, x1:15, y0:0, y1:0, to:'farm', at:[30, 42], face:'up'}],
            signs:{'17,5':'Речка. Скоро здесь появится рыбалка.'}},
-  road:   {name:'Дорога в деревню', W:30, H:14, build:buildRoad, exits:[{x0:0, x1:0, y0:7, y1:8, to:'farm', at:[34, 15], face:'left'}],
+  road:   {name:'Дорога в деревню', W:30, H:14, build:buildRoad, exits:[{x0:0, x1:0, y0:7, y1:8, to:'farm', at:[70, 24], face:'left'}],
            signs:{'25,5':'До деревни два километра. Деревня и её жители появятся позже.'}}
 };
 const loc = () => LOCATIONS[state.loc];
@@ -246,16 +251,35 @@ function buildMap() {
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++)
     if (map[y][x] === '.' && hash(x, y, 7 + W) < 0.09) map[y][x] = ',';
 }
+/* building sites on the farm: one greenhouse and three for a chicken coop or a barn */
+const SITES = [
+  {x0:3, y0:12, x1:9, y1:17, kind:'greenhouse'},
+  {x0:40, y0:28, x1:45, y1:32, kind:'animals'}, {x0:48, y0:28, x1:53, y1:32, kind:'animals'}, {x0:56, y0:28, x1:61, y1:32, kind:'animals'}
+];
+const YARD = {x0:10, y0:3, x1:17, y1:9};
 function buildFarm(set, rect) {
-  rect(2, 1, 5, 3, 'H'); set(4, 3, 'D');
-  set(9, 2, 'W'); set(6, 3, 'S'); set(3, 4, 'X');
-  /* paths: door → down to the road; road → right exit; a lane from the yard up to the top exit; a lane down to the bottom exit */
-  rect(4, 4, 4, 15, '='); rect(4, 15, 35, 15, '='); rect(34, 16, 35, 16, '=');
-  rect(4, 4, 12, 4, '='); rect(12, 0, 12, 4, '='); rect(13, 0, 13, 1, '=');
-  rect(9, 15, 9, 21, '='); rect(10, 20, 10, 21, '=');
-  rect(1, 16, 5, 19, '~'); rect(6, 17, 6, 18, '~');
-  [[20,2],[24,2],[25,3],[30,2],[33,3],[34,6],[32,12],[33,13],[34,18],[31,18],[26,18],[22,17],[17,18],[14,19],[2,12],[1,9],[23,9],[28,6],[16,8]].forEach(([x, y]) => set(x, y, 'T'));
-  [[16,2],[24,10],[8,17],[31,4],[19,19],[29,19],[6,10]].forEach(([x, y]) => set(x, y, 'B'));
+  rect(12, 5, 15, 7, 'H'); set(14, 7, 'D');
+  set(19, 6, 'W'); set(16, 7, 'S'); set(12, 8, 'X');
+  /* paths: door → down to the road; the road → right exit; a lane from the yard up to the top exit; a lane down to the bottom exit */
+  rect(14, 8, 14, 24, '='); rect(14, 24, 71, 24, '='); rect(70, 25, 71, 25, '=');
+  rect(14, 8, 24, 8, '='); rect(24, 0, 24, 8, '='); rect(25, 0, 25, 1, '=');
+  rect(30, 24, 30, 43, '='); rect(31, 42, 31, 43, '=');
+  rect(6, 18, 6, 23, '='); rect(6, 24, 13, 24, '=');
+  [43, 51, 59].forEach(x => rect(x, 25, x, 27, '='));
+  SITES.forEach(t => rect(t.x0, t.y0, t.x1, t.y1, 'P'));
+  rect(3, 31, 10, 37, '~'); rect(5, 30, 9, 30, '~'); rect(11, 33, 11, 36, '~'); rect(4, 38, 8, 38, '~');
+  /* trees and bushes: a grove in the corners, a few lone ones; the middle stays open for the fields */
+  const keep = (x, y) => map[y][x] !== '.' ||
+    (x >= YARD.x0 - 1 && x <= YARD.x1 + 1 && y >= YARD.y0 - 1 && y <= YARD.y1 + 1) ||
+    SITES.some(t => x >= t.x0 - 1 && x <= t.x1 + 1 && y >= t.y0 - 1 && y <= t.y1 + 1) ||
+    (x >= 18 && x <= 56 && y >= 10 && y <= 22) || [8, 24].includes(y) || [14, 24, 30].includes(x) ||
+    [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]].some(([a, b]) => map[b] && map[b][a] === '=');
+  for (let y = 1; y < 43; y++) for (let x = 1; x < 71; x++) {
+    if (keep(x, y)) continue;
+    const corner = (x > 58 && y < 14) || (x < 20 && y > 38) || (x > 60 && y > 34) || (x < 8 && y < 10);
+    const r = hash(x, y, 501);
+    if (r < (corner ? 0.3 : 0.035)) set(x, y, 'T'); else if (r < (corner ? 0.36 : 0.05)) set(x, y, 'B');
+  }
 }
 function buildForest(set, rect) {
   rect(14, 12, 15, 19, '='); rect(10, 7, 19, 11, ',');
@@ -285,7 +309,7 @@ function buildRoad(set, rect) {
 function farmable(x, y) {
   if (state.loc !== 'farm' || !inMap(x, y)) return false;
   const ch = map[y][x];
-  return (ch === '.' || ch === ',') && !(x <= 7 && y <= 5);
+  return (ch === '.' || ch === ',') && !(x >= YARD.x0 && x <= YARD.x1 && y >= YARD.y0 && y <= YARD.y1);
 }
 const plotAt = (x, y) => state.loc === 'farm' ? state.plots[x + ',' + y] : null;
 const trodKey = (x, y) => state.loc + ':' + x + ',' + y;
@@ -303,6 +327,7 @@ function buildGround(snow) {
     if (ch === '~') { g.fillStyle = C.water; g.fillRect(x * T, y * T, T, T); }
     else if (snow) drawSnow(g, x, y);
     else if (ch === '=') drawPath(g, x, y);
+    else if (ch === 'P') drawSite(g, x, y);
     else { drawGrass(g, x, y, look.grass); if (look.fallen && hash(x, y, 13) < .7) drawFallen(g, x, y, look.fallen); }
   }
   return c;
@@ -325,7 +350,10 @@ function buildObjects() {
     else if (ch === 'I') objects.push({kind:'sign', px, py});
     else if (ch === ',' && look && look.flowers !== 'none' && !look.snow) objects.push({kind:'flower', a:x, b:y, px, py, tx:x, ty:y});
   }
-  if (state.loc === 'farm') objects.push({kind:'house', px:2 * T, py:4 * T});
+  if (state.loc === 'farm') {
+    objects.push({kind:'house', px:12 * T, py:8 * T});
+    SITES.forEach(t => [[t.x0, t.y0], [t.x1, t.y0], [t.x0, t.y1], [t.x1, t.y1]].forEach(([x, y]) => objects.push({kind:'stake', px:x * T + T / 2, py:y * T + T - 1})));
+  }
 }
 
 /* ---------- game logic ---------- */
@@ -362,7 +390,7 @@ function update(dt) {
     return;
   }
   state.min += dt * 4;
-  if (state.min >= 1380 && !state.lateWarned) { state.lateWarned = true; toast(state.loc === 'farm' ? 'Уже 23:00. Пора домой — дверь дома в левом верхнем углу.' : 'Уже 23:00. Пора возвращаться домой.'); }
+  if (state.min >= 1380 && !state.lateWarned) { state.lateWarned = true; toast(state.loc === 'farm' ? 'Уже 23:00. Пора домой спать.' : 'Уже 23:00. Пора возвращаться домой.'); }
   if (state.min >= 1440) { newDay('Тёма так заработался, что уснул прямо на улице. Соседи проводили его до дома.'); return; }
   const p = player;
   if (p.moving) { p.t += dt / 0.15; p.walk += dt; if (p.t >= 1) {
@@ -489,7 +517,7 @@ function newDay(note) {
   if (season().id === 'winter') { if (snowed) { state.snowCover = true; state.snowTrod = {}; } }
   else { state.snowCover = false; state.snowTrod = {}; }
   held.length = 0; fade.a = 0; fade.dir = 0;
-  enterLocation('farm', [4, 4], 'down');
+  enterLocation('farm', [14, 8], 'down');
   openMorning(note, ripened, dry, {changed, withered, snowed, shipped});
 }
 
@@ -917,6 +945,12 @@ function loop(now) {
 }
 function start(data) {
   state = merge((data && data.state) || load());
+  if (state.mapV !== 2) {
+    const moved = {};
+    for (const key in state.plots) { const [x, y] = key.split(',').map(Number); moved[(x + 18) + ',' + (y + 6)] = state.plots[key]; }
+    state.plots = moved; state.mapV = 2; state.loc = 'farm'; state.px = 14; state.py = 9; state.snowTrod = {};
+    save();
+  }
   resize(); buildMap(); refreshLook(); player = makePlayer(); buildBelt();
   if (window.claude && window.claude.hot && window.claude.hot.snapshot) window.claude.hot.snapshot(() => ({state:snap()}));
   if (!state.intro) openIntro(); else toast('С возвращением! День ' + state.day + '.');

@@ -196,7 +196,7 @@ const SECTIONS = [
     {id:'market', name:'Рынок тёти Гали', meta:'80 × 48 · пока убран из игры, вернётся вместе с продавцом', wide:true, figs:() => [fig(obj('market'), '')]},
     {id:'well', name:'Колодец', meta:'16 × 28, навес выше клетки', figs:() => [fig(obj('well'), '')]},
     {id:'tree', name:'Деревья и куст', meta:'32 × 40, крона шире и выше клетки · куст 20 × 16', wide:true, figs:() => [fig(obj('tree', 0), 'раскидистое'), fig(obj('tree', 1), 'высокое'), fig(obj('bush'), 'куст')]},
-    {id:'yard', name:'Двор', meta:'ящик для отгрузки 16 × 16 · почтовый ящик 12 × 22 · табличка 16 × 18', figs:() => [fig(obj('bin'), 'отгрузка'), fig(obj('mailbox'), 'почта'), fig(obj('sign'), 'табличка')]},
+    {id:'yard', name:'Двор и стройплощадки', wide:true, meta:'ящик для отгрузки 16 × 16 · почтовый ящик 12 × 22 · табличка 16 × 18 · колышек 8 × 14 · площадка под постройку', figs:() => [fig(obj('bin'), 'отгрузка'), fig(obj('mailbox'), 'почта'), fig(obj('sign'), 'табличка'), fig(obj('stake'), 'колышек'), fig(sprite(32, 16, g => { S.drawSite(g, 0, 0); S.drawSite(g, 1, 0); }), 'стройплощадка')]},
     {id:'fence', name:'Забор', meta:'16 × 16 · соединяется с соседними секциями · пока не используется', wide:true, figs:() => {
       const piece = (w, h, isF) => sprite(w * 16, h * 16, g => { for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) isF(x, y) ? S.drawFence(g, x, y, (a, b) => a >= 0 && b >= 0 && a < w && b < h && isF(a, b)) : S.drawGrass(g, x, y); });
       return [fig(piece(1, 1, () => true), 'столбик'), fig(piece(3, 1, () => true), 'пролёт'), fig(piece(3, 3, (x, y) => x === 0 || y === 0), 'угол')];
