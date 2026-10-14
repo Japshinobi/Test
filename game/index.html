@@ -176,7 +176,7 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-const {C, CROPS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, drawSite, drawField, drawBridge, drawDitch, drawCobbles, clearCache, hash, drawGrass, drawPath, drawDirt, decoKind, fenceMask, cropStage, drawSoil, drawWater, iconCanvas, sprite, sunAt, castShadow, applyLight} = window.OgorodSprites;
+const {C, CROPS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, drawSite, drawField, drawBridge, drawDitch, drawCobbles, drawFountainWater, clearCache, hash, drawGrass, drawPath, drawDirt, decoKind, fenceMask, cropStage, drawSoil, drawWater, iconCanvas, sprite, sunAt, castShadow, applyLight} = window.OgorodSprites;
 const KEYS = Object.keys(CROPS);
 const TOOLS = [{id:'hoe', name:'Мотыга'}, {id:'can', name:'Лейка'}, {id:'axe', name:'Топор'}, {id:'pick', name:'Кирка'}, {id:'scythe', name:'Коса'},
   ...KEYS.map(k => ({id:'seed', k, name:CROPS[k].seedName}))];
@@ -188,7 +188,7 @@ const RES = {wood:{name:'Дрова'}, stone:{name:'Камень'}};
 const EQUIP = [{id:'head', name:'Голова'}, {id:'body', name:'Тело'}, {id:'legs', name:'Штаны'}, {id:'feet', name:'Обувь'}];
 /* the bigger watering can and the house repair will be sold by a character added later */
 const DIRS = {up:[0,-1], down:[0,1], left:[-1,0], right:[1,0]};
-const WALK = '.,=PQNbdO', INTERACT = 'DWSX~HITRKUYZJCAMm';
+const WALK = '.,=PQNbdO', INTERACT = 'DWSX~HITRKUYZJCAMmg';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -368,18 +368,21 @@ function buildCross(set, rect) {
 /* the market: stalls in a U open to the right, a square in the middle, the universal trader's tent on it.
    Free places wait for future traders */
 const SHOPS = [
-  {id:'fruit', kind:'stall', x0:6, y0:3, x1:9, y1:5}, {id:'veg', kind:'stall', x0:13, y0:3, x1:16, y1:5},
-  {id:null, kind:'stall', x0:20, y0:3, x1:23, y1:5}, {id:null, kind:'stall', x0:27, y0:3, x1:30, y1:5},
-  {id:'berry', kind:'stallside', x0:2, y0:8, x1:4, y1:11}, {id:null, kind:'stallside', x0:2, y0:17, x1:4, y1:20},
-  {id:null, kind:'stallback', x0:6, y0:25, x1:9, y1:26}, {id:null, kind:'stallback', x0:13, y0:25, x1:16, y1:26},
-  {id:null, kind:'stallback', x0:20, y0:25, x1:23, y1:26}, {id:null, kind:'stallback', x0:27, y0:25, x1:30, y1:26},
-  {id:'any', kind:'tent', x0:17, y0:12, x1:20, y1:15}
+  {id:'fruit', kind:'stall', x0:10, y0:5, x1:13, y1:7}, {id:'veg', kind:'stall', x0:15, y0:5, x1:18, y1:7},
+  {id:null, kind:'stall', x0:20, y0:5, x1:23, y1:7}, {id:null, kind:'stall', x0:25, y0:5, x1:28, y1:7},
+  {id:'berry', kind:'stallside', x0:8, y0:10, x1:10, y1:13}, {id:null, kind:'stallside', x0:8, y0:16, x1:10, y1:19},
+  {id:null, kind:'stallback', x0:10, y0:22, x1:13, y1:23}, {id:null, kind:'stallback', x0:15, y0:22, x1:18, y1:23},
+  {id:null, kind:'stallback', x0:20, y0:22, x1:23, y1:23}, {id:null, kind:'stallback', x0:25, y0:22, x1:28, y1:23},
+  {id:'any', kind:'tent', x0:25, y0:9, x1:28, y1:12}
 ];
 const shopAt = (x, y) => state.loc === 'market' ? SHOPS.find(t => x >= t.x0 && x <= t.x1 && y >= t.y0 && y <= t.y1) : null;
 function buildMarket(set, rect) {
-  rect(1, 1, 38, 28, 'O'); rect(36, 14, 39, 15, '=');
+  /* the square with a fountain in the middle, grass around it and a road from the right edge */
+  rect(7, 4, 31, 24, 'O'); rect(32, 14, 39, 15, '=');
   SHOPS.forEach(t => rect(t.x0, t.y0, t.x1, t.y1, t.id ? 'M' : 'm'));
-  [[34, 3], [35, 26], [8, 14], [10, 21]].forEach(([x, y]) => set(x, y, 'B'));
+  rect(18, 13, 20, 15, 'g');
+  [[4, 6], [35, 4], [36, 24], [3, 22], [33, 19], [5, 15]].forEach(([x, y]) => set(x, y, 'T'));
+  [[34, 10], [2, 11], [33, 26], [6, 26], [35, 18]].forEach(([x, y]) => set(x, y, 'B'));
 }
 /* Where the hoe works: any grass on the farm, except the yard (the house and two tiles around it) */
 function farmable(x, y) {
@@ -403,12 +406,12 @@ function buildGround(snow) {
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const ch = map[y][x];
     if (ch === '~') { g.fillStyle = C.water; g.fillRect(x * T, y * T, T, T); }
-    else if (ch === 'V') drawDitch(g, x, y, look.ice);
+    else if (ch === 'V') { const v = (a, b) => inMap(a, b) && map[b][a] === 'V'; drawDitch(g, x, y, look.ice, (v(x - 1, y) ? 1 : 0) | (v(x + 1, y) ? 2 : 0) | (v(x, y - 1) ? 4 : 0) | (v(x, y + 1) ? 8 : 0)); }
     else if (snow) drawSnow(g, x, y);
     else if (ch === '=') drawPath(g, x, y);
     else if (ch === 'P') drawSite(g, x, y);
     else if (ch === 'Q' || ch === 'N' || ch === 'q' || ch === 'n') drawField(g, x, y, look, ch === 'N' || ch === 'n' ? 'sun' : 'wheat');
-    else if (ch === 'O' || (state.loc === 'market' && 'MmB'.includes(ch))) drawCobbles(g, x, y);
+    else if (ch === 'O' || (state.loc === 'market' && 'Mmg'.includes(ch))) drawCobbles(g, x, y);
     else if (ch === 'b' || ch === 'd') drawBridge(g, x, y, ch === 'b' ? 0 : 1);
     else { drawGrass(g, x, y, look.grass); if (look.fallen && hash(x, y, 13) < .7) drawFallen(g, x, y, look.fallen); }
   }
@@ -443,6 +446,7 @@ function buildObjects() {
     else if (ch === ',' && look && look.flowers !== 'none' && !look.snow) objects.push({kind:'flower', a:x, b:y, px, py, tx:x, ty:y});
   }
   if (state.loc === 'cross') objects.push({kind:'barrier', a:'h', px:26 * T, py:8 * T}, {kind:'barrier', a:'v', px:44 * T + T / 2, py:22 * T});
+  if (state.loc === 'market') objects.push({kind:'fountain', px:18 * T, py:16 * T, tx:18, ty:13, anim:true});
   if (state.loc === 'market') SHOPS.forEach(t => objects.push({kind:t.kind, a:t.id || 'empty', shop:!!t.id, px:t.x0 * T, py:(t.y1 + 1) * T, tx:t.x0, ty:t.y0}));
   if (state.loc === 'farm') {
     objects.push({kind:'bigtree', px:69 * T + T / 2, py:26 * T});
@@ -526,6 +530,7 @@ function act(tx, ty) {
   if ('YJCA'.includes(c)) return toast((loc().texts || {})[c] || '');
   if (c === 'Z') return toast(loc().texts['Z:' + (tx > 30 ? 'right' : 'top')]);
   if (c === 'm') return toast('Свободное место. Здесь появится новый торговец.');
+  if (c === 'g') return toast(look.ice ? 'Фонтан замёрз до весны.' : 'Фонтан на рыночной площади. Вода журчит.');
   if (c === 'M') { const t = shopAt(tx, ty); if (!marketOpen()) return toast(season().d === SEASON_DAYS ? 'Сегодня у рынка выходной: последний день сезона.' : 'Рынок открыт с 8:00 до 18:00.'); return openTrader(t.id); }
   if ((c === 'Q' || c === 'N') && TOOLS[state.tool].id !== 'can') { SFX.nope(); return toast('Это соседское поле: здесь ничего не собрать.'); }
   if (c === 'W' || c === '~') {
@@ -1074,7 +1079,7 @@ function render(now) {
   /* everything standing on the ground this frame */
   const list = [];
   const inView = (px, py) => px > cam.x - 96 && px < cam.x + viewW + 48 && py > cam.y - 8 && py < cam.y + viewH + 64;
-  objects.forEach(o => { if (inView(o.px, o.py) && !(o.kind === 'flower' && plotAt(o.tx, o.ty))) list.push({o:sprite(o.kind, o.kind === 'house' ? state.house : o.a, o.shop !== undefined ? o.shop && marketOpen() : o.b, look), px:o.px, py:o.py, key:o.tx + ',' + o.ty}); });
+  objects.forEach(o => { if (inView(o.px, o.py) && !(o.kind === 'flower' && plotAt(o.tx, o.ty))) list.push({o:sprite(o.kind, o.kind === 'house' ? state.house : o.a, o.shop !== undefined ? o.shop && marketOpen() : o.b, look), px:o.px, py:o.py, key:o.tx + ',' + o.ty, anim:o.anim}); });
   for (let y = y0; y <= Math.min(H - 1, y1 + 2); y++) for (let x = x0; x <= x1; x++) {
     const pl = plotAt(x, y);
     if (pl && pl.c) list.push({o:pl.c.dead ? sprite('dead', 0, 0, look) : sprite('crop', pl.c.k, cropStage(pl.c), look), px:x * T + T / 2, py:y * T + T});
@@ -1092,7 +1097,10 @@ function render(now) {
   }
   list.sort((a, b) => a.py - b.py || (a.me ? 1 : 0) - (b.me ? 1 : 0) || a.px - b.px);
   const sk = now - shake.t < 220 ? Math.round(Math.sin((now - shake.t) / 22)) : 0;
-  list.forEach(it => ctx.drawImage(it.o.img, it.px - it.o.ax + (sk && it.key === shake.key ? sk : 0), it.py - it.o.ay));
+  list.forEach(it => {
+    ctx.drawImage(it.o.img, it.px - it.o.ax + (sk && it.key === shake.key ? sk : 0), it.py - it.o.ay);
+    if (it.anim) drawFountainWater(ctx, it.px - it.o.ax, it.py - it.o.ay, now / 1000, look.ice);
+  });
   particles.forEach(q => { ctx.fillStyle = q.c; ctx.fillRect(Math.round(q.x), Math.round(q.y), 2, 2); });
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if (weatherFor(state.day) === 'snow') drawSnowfall(now);

@@ -200,9 +200,9 @@ const SECTIONS = [
     {id:'crossroads', name:'Перекрёсток', meta:'шлагбаумы 32 × 18 и 14 × 36 · указатель 18 × 26 · пугало 16 × 28 · подсолнух 14 × 26 · стог 24 × 18', wide:true, figs:() => [
       fig(obj('barrier', 'h'), 'шлагбаум'), fig(obj('barrier', 'v'), 'шлагбаум'), fig(obj('signpost'), 'указатель'), fig(obj('scarecrow'), 'пугало'),
       fig(obj('sunflower', 0), 'подсолнух'), fig(obj('sunflower', 1), 'цветёт'), fig(obj('sunflower', 2), 'осенью'), fig(obj('haystack'), 'стог')]},
-    {id:'market-stalls', name:'Рынок: прилавки', meta:'прилавок 64 × 48 · боковой 48 × 64 · задняя сторона 64 × 40 · палатка 64 × 64; ночью и в выходной торговцев нет', wide:true, figs:() => [
+    {id:'market-stalls', name:'Рынок: прилавки', meta:'прилавок 64 × 48 · боковой 48 × 64 · задняя сторона 64 × 40 · палатка 64 × 64 · фонтан 48 × 56 (3 × 3 клетки, вода анимирована); ночью и в выходной торговцев нет', wide:true, figs:() => [
       fig(obj('stall', 'fruit', true), 'фрукты'), fig(obj('stall', 'veg', true), 'овощи'), fig(obj('stallside', 'berry', true), 'ягоды и грибы'),
-      fig(obj('tent', 'any', true), 'универсальный'), fig(obj('stall', 'empty', false), 'свободно'), fig(obj('stallback'), 'свободно, сзади'), fig(obj('stall', 'veg', false), 'закрыто')]},
+      fig(obj('tent', 'any', true), 'универсальный'), fig(sprite(48, 56, g => { g.drawImage(S.sprite('fountain').img, 0, 0); S.drawFountainWater(g, 0, 0, 0.3, false); }), 'фонтан'), fig(obj('stall', 'empty', false), 'свободно'), fig(obj('stallback'), 'свободно, сзади'), fig(obj('stall', 'veg', false), 'закрыто')]},
     {id:'well', name:'Колодец', meta:'16 × 28, навес выше клетки', figs:() => [fig(obj('well'), '')]},
     {id:'tree', name:'Деревья и куст', meta:'32 × 40, крона шире и выше клетки · куст 20 × 16', wide:true, figs:() => [fig(obj('tree', 0), 'раскидистое'), fig(obj('tree', 1), 'высокое'), fig(obj('bush'), 'куст')]},
     {id:'yard', name:'Двор и стройплощадки', wide:true, meta:'ящик для отгрузки 16 × 16 · почтовый ящик 12 × 22 · табличка 16 × 18 · колышек 8 × 14 · площадка под постройку', figs:() => [fig(obj('bin'), 'отгрузка'), fig(obj('mailbox'), 'почта'), fig(obj('sign'), 'табличка'), fig(obj('stake'), 'колышек'), fig(sprite(32, 16, g => { S.drawSite(g, 0, 0); S.drawSite(g, 1, 0); }), 'стройплощадка')]},

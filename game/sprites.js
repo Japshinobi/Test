@@ -94,11 +94,22 @@ function drawField(g, x, y, look, type) {
     P(c, top + 2, 1, 14 - top, stalk); P(c, top, 1, 3, head);
   }
 }
-/* a ditch with water and reeds: a natural edge of the walkable world */
-function drawDitch(g, x, y, ice) {
-  const P = painter(g, x * T, y * T);
-  P(0, 0, 16, 16, '#4f7a36'); P(0, 4, 16, 8, '#5e4a2e'); P(0, 6, 16, 4, ice ? '#b9dcf2' : '#2f5fb8'); P(0, 6, 16, 1, ice ? '#ffffff' : '#6a98f4');
-  for (let i = 0; i < 4; i++) { const rx = Math.floor(hash(x, y, i + 300) * 14); P(rx, 1 + (i % 2) * 10, 1, 4, '#3f8a2f'); P(rx, 1 + (i % 2) * 10, 1, 1, '#8a6a3a'); }
+/* a ditch with water and reeds: a natural edge of the walkable world.
+   mask tells which neighbours are ditch too (1 left, 2 right, 4 up, 8 down), so it runs on and turns corners */
+function drawDitch(g, x, y, ice, mask = 3) {
+  const P = painter(g, x * T, y * T), bank = '#5e4a2e', water = ice ? '#b9dcf2' : '#2f5fb8', hi = ice ? '#ffffff' : '#6a98f4';
+  if (!(mask & 12) && !(mask & 3)) mask = 3;
+  P(0, 0, 16, 16, '#4f7a36');
+  P(3, 3, 10, 10, bank);
+  if (mask & 1) P(0, 3, 8, 10, bank); if (mask & 2) P(8, 3, 8, 10, bank); if (mask & 4) P(3, 0, 10, 8, bank); if (mask & 8) P(3, 8, 10, 8, bank);
+  P(5, 5, 6, 6, water);
+  if (mask & 1) P(0, 5, 8, 6, water); if (mask & 2) P(8, 5, 8, 6, water); if (mask & 4) P(5, 0, 6, 8, water); if (mask & 8) P(5, 8, 6, 8, water);
+  if (mask & 3) P(mask & 1 ? 0 : 5, 5, (mask & 1 ? 8 : 3) + (mask & 2 ? 8 : 3), 1, hi); else P(5, mask & 4 ? 0 : 5, 1, (mask & 4 ? 8 : 3) + (mask & 8 ? 8 : 3), hi);
+  for (let i = 0; i < 3; i++) {
+    const r = Math.floor(hash(x, y, i + 300) * 3);
+    const [rx, ry] = (mask & 3) && !(mask & 12) ? [Math.floor(hash(x, y, i + 310) * 14), i % 2 ? 0 : 12] : [i % 2 ? 0 : 14, Math.floor(hash(x, y, i + 310) * 12)];
+    P(rx, ry, 1, 3 + r, '#3f8a2f'); P(rx, ry, 1, 1, '#8a6a3a');
+  }
 }
 /* market square cobbles */
 function drawCobbles(g, x, y) {
@@ -406,6 +417,35 @@ function drawTent(g, open) {
   P(10, 50, 44, 10, C.fence); P(10, 50, 44, 2, C.fenceL); P(10, 58, 44, 2, C.fenceD);
   if (open) drawGoods(P, 13, 49, 'any', 6);
   P(4, 54, 3, 10, C.fenceD); P(57, 54, 3, 10, C.fenceD);
+}
+/* round fountain, 48 × 56 (stands on 3 × 3 tiles, the spout rises above). The water is drawn every frame by drawFountainWater */
+function drawFountain(g) {
+  const P = painter(g, 0, 0), cx = 24, cy = 34, rx = 23, ry = 19;
+  for (let y = -ry; y <= ry; y++) { const w = Math.round(rx * Math.sqrt(1 - (y / ry) ** 2)); P(cx - w, cy + y, w * 2, 1, y > ry - 5 ? '#6f6f66' : y > 0 ? C.stoneD : C.stone); }
+  for (let y = -ry + 3; y <= ry - 4; y++) { const w = Math.round((rx - 4) * Math.sqrt(1 - (y / (ry - 3)) ** 2)); if (w > 0) P(cx - w, cy + y, w * 2, 1, y < -ry + 5 ? C.stoneL : '#2f6fd8'); }
+  P(21, 18, 6, 18, C.stone); P(21, 18, 2, 18, C.stoneL); P(25, 18, 2, 18, C.stoneD);
+  P(16, 14, 16, 4, C.stone); P(17, 13, 14, 1, C.stoneL); P(16, 17, 16, 1, C.stoneD); P(19, 14, 10, 2, '#2f6fd8');
+}
+function drawFountainWater(g, X, Y, sec, ice) {
+  const P = painter(g, X, Y), cx = 24, cy = 34;
+  if (ice) {
+    for (let y = -14; y <= 13; y++) { const w = Math.round(19 * Math.sqrt(Math.max(0, 1 - (y / 16) ** 2))); if (w > 0) P(cx - w, cy + y, w * 2, 1, '#b9dcf2'); }
+    P(21, 18, 6, 18, C.stone); P(21, 18, 2, 18, C.stoneL); P(25, 18, 2, 18, C.stoneD); P(19, 14, 10, 2, '#b9dcf2');
+    P(10, 30, 6, 1, '#ffffff'); P(30, 38, 5, 1, '#ffffff');
+    return;
+  }
+  /* ripples running outwards in the basin */
+  for (let k = 0; k < 2; k++) {
+    const f = (sec * .45 + k * .5) % 1, rr = 6 + f * 12;
+    for (let i = 0; i < 18; i++) { const a = i / 18 * Math.PI * 2, px = Math.round(cx + Math.cos(a) * rr * 1.15), py = Math.round(cy + 2 + Math.sin(a) * rr * .8); if (py > 20 && py < 50) P(px, py, 2, 1, '#6a98f4'); }
+  }
+  /* jets falling from the top bowl */
+  for (let i = 0; i < 10; i++) {
+    const side = i % 2 ? 1 : -1, ph = (sec * 1.3 + i * .137) % 1;
+    const px = Math.round(cx + side * (3 + ph * (6 + (i % 3) * 3))), py = Math.round(14 - Math.sin(ph * Math.PI) * 9 + ph * ph * 22);
+    P(px, py, 1, 2, ph < .5 ? '#d8ecff' : '#9cc8f4');
+  }
+  P(23, 6 + Math.round(Math.sin(sec * 8)), 2, 8, '#d8ecff');
 }
 /* wooden sign on two posts */
 function drawSign(g) {
@@ -790,6 +830,7 @@ function sprite(kind, a, b, look = SUMMER) {
     case 'stallside': return cached('stallside' + a + b + (look.snow ? 's' : ''), 48, 64, 0, 64, g => { drawStallSide(g, a, b); sn(g); });
     case 'stallback': return cached('stallback' + (look.snow ? 's' : ''), 64, 40, 0, 40, g => { drawStallBack(g); sn(g); });
     case 'tent':      return cached('tent' + b + (look.snow ? 's' : ''), 64, 64, 0, 64, g => { drawTent(g, b); sn(g); });
+    case 'fountain':  return cached('fountain' + (look.snow ? 's' : ''), 48, 56, 0, 56, g => { drawFountain(g); sn(g); });
     case 'stake':   return cached('stake' + (look.snow ? 's' : ''), 8, 14, 3, 14, g => { drawStake(g); sn(g); });
     case 'sign':    return cached('sign' + (look.snow ? 's' : ''), 16, 18, 8, 18, g => { drawSign(g); sn(g); });
     case 'market': return cached('market' + lk, 80, 48, 0, 48, g => { drawMarket(g, 0, 0); sn(g); });
@@ -868,6 +909,6 @@ function applyLight(g, w, h, min) {
 }
 
 
-return {T, C, CROPS, SEASONS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, drawSite, drawField, drawBridge, drawDitch, drawCobbles, clearCache, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, drawProduce, iconCanvas, drawPlayer,
+return {T, C, CROPS, SEASONS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, drawSite, drawField, drawBridge, drawDitch, drawCobbles, drawFountainWater, clearCache, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, drawProduce, iconCanvas, drawPlayer,
   decoKind, fenceMask, sprite, silhouette, sunAt, castShadow, tintAt, applyLight};
 })();
