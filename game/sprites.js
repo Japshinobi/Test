@@ -205,6 +205,25 @@ function drawStake(g) {
   const P = painter(g, 0, 0);
   P(2, 2, 2, 12, C.trunk); P(2, 2, 1, 12, C.trunkD); P(1, 1, 4, 2, '#c99a66'); P(4, 4, 3, 2, '#e0402c'); P(5, 6, 2, 1, '#b8301e');
 }
+/* boulder: the pickaxe breaks it */
+function drawRock(g) {
+  const P = painter(g, 0, 0);
+  P(2, 4, 12, 8, C.stone); P(3, 2, 9, 3, C.stone); P(4, 1, 6, 1, C.stone);
+  P(3, 2, 6, 2, C.stoneL); P(2, 5, 2, 3, C.stoneL); P(2, 10, 12, 2, C.stoneD); P(11, 3, 3, 8, C.stoneD);
+  P(6, 6, 2, 1, C.stoneD); P(8, 8, 1, 1, C.stoneD); P(5, 9, 1, 1, C.stoneL);
+}
+/* fallen branches: one blow of the axe */
+function drawTwigs(g) {
+  const P = painter(g, 0, 0);
+  line(P, 1, 6, 12, 2, 1, C.trunk); line(P, 3, 7, 14, 5, 1, C.trunkD); line(P, 6, 4, 8, 1, 1, C.trunk); line(P, 10, 5, 12, 7, 1, C.trunk);
+  P(12, 1, 2, 1, C.leafD); P(7, 0, 2, 1, C.leaf);
+}
+/* what is left of a felled tree */
+function drawStump(g) {
+  const P = painter(g, 0, 0);
+  P(3, 3, 10, 7, C.trunk); P(3, 3, 2, 7, C.trunkD); P(3, 2, 10, 2, '#c99a66'); P(5, 2, 6, 1, '#a0784f'); P(7, 2, 2, 1, C.trunkD);
+  P(1, 8, 3, 2, C.trunk); P(12, 8, 3, 2, C.trunk);
+}
 /* wooden sign on two posts */
 function drawSign(g) {
   const P = painter(g, 0, 0);
@@ -387,6 +406,26 @@ function iconCanvas(kind, k) {
   if (kind === 'hoe') {
     for (let i = 0; i < 10; i++) P(2 + i, 13 - i, 2, 2, C.trunk);
     P(9, 1, 6, 3, '#9aa3ad'); P(12, 4, 3, 3, '#9aa3ad'); P(9, 1, 6, 1, '#c9d0d6');
+  } else if (kind === 'axe') {
+    for (let i = 0; i < 10; i++) P(3 + i, 14 - i, 2, 2, C.trunk);
+    P(9, 1, 4, 7, '#9aa3ad'); P(12, 2, 3, 5, '#9aa3ad'); P(14, 3, 1, 3, '#c9d0d6'); P(9, 1, 4, 1, '#c9d0d6');
+  } else if (kind === 'pick') {
+    for (let i = 0; i < 11; i++) P(3 + i, 14 - i, 2, 2, C.trunk);
+    P(5, 2, 9, 2, '#9aa3ad'); P(3, 3, 3, 2, '#9aa3ad'); P(2, 4, 2, 3, '#9aa3ad'); P(13, 3, 2, 2, '#9aa3ad'); P(14, 4, 1, 3, '#9aa3ad'); P(5, 2, 9, 1, '#c9d0d6');
+  } else if (kind === 'scythe') {
+    for (let i = 0; i < 12; i++) P(4 + Math.floor(i * .6), 15 - i, 2, 1, C.trunk);
+    P(3, 2, 9, 2, '#c9d0d6'); P(1, 3, 3, 2, '#c9d0d6'); P(0, 5, 2, 2, '#9aa3ad'); P(11, 3, 3, 1, '#9aa3ad');
+  } else if (kind === 'wood') {
+    P(1, 6, 13, 4, C.trunk); P(1, 6, 13, 1, '#a97c50'); P(12, 6, 3, 4, '#c99a66'); P(13, 7, 1, 2, C.trunkD);
+    P(2, 10, 12, 4, C.trunkD); P(2, 10, 12, 1, C.trunk); P(11, 10, 3, 4, '#c99a66'); P(12, 11, 1, 2, C.trunk);
+  } else if (kind === 'stone') {
+    P(2, 7, 8, 6, C.stone); P(3, 6, 6, 1, C.stoneL); P(2, 12, 8, 1, C.stoneD); P(8, 5, 6, 6, C.stoneD); P(9, 4, 4, 2, C.stone); P(9, 4, 2, 1, C.stoneL);
+  } else if (kind.startsWith('eq-')) {
+    const c = 'rgba(170,180,232,.45)';
+    if (kind === 'eq-head') { P(5, 3, 6, 3, c); P(2, 6, 12, 2, c); }
+    if (kind === 'eq-body') { P(4, 3, 8, 10, c); P(2, 4, 2, 6, c); P(12, 4, 2, 6, c); }
+    if (kind === 'eq-legs') { P(4, 2, 8, 4, c); P(4, 6, 3, 8, c); P(9, 6, 3, 8, c); }
+    if (kind === 'eq-feet') { P(2, 8, 5, 5, c); P(9, 8, 5, 5, c); P(1, 12, 6, 2, c); P(9, 12, 6, 2, c); }
   } else if (kind === 'can') {
     P(3, 6, 9, 8, '#7d9bb5'); P(3, 6, 9, 2, '#a9c2d6'); P(12, 8, 2, 2, '#7d9bb5'); P(14, 6, 2, 3, '#7d9bb5');
     P(5, 3, 5, 1, '#5e7a92'); P(4, 3, 1, 3, '#5e7a92'); P(10, 3, 1, 3, '#5e7a92');
@@ -543,6 +582,9 @@ function sprite(kind, a, b, look = SUMMER) {
     });
     case 'bin':     return cached('bin' + (look.snow ? 's' : ''), 16, 16, 8, 16, g => { drawBin(g); sn(g); });
     case 'mailbox': return cached('mailbox' + (look.snow ? 's' : ''), 12, 22, 6, 22, g => { drawMailbox(g); sn(g); });
+    case 'rock':    return cached('rock' + (look.snow ? 's' : ''), 16, 12, 8, 12, g => { drawRock(g); sn(g); });
+    case 'twigs':   return cached('twigs' + (look.snow ? 's' : ''), 16, 8, 8, 8, g => { drawTwigs(g); sn(g); });
+    case 'stump':   return cached('stump' + (look.snow ? 's' : ''), 16, 10, 8, 10, g => { drawStump(g); sn(g); });
     case 'stake':   return cached('stake' + (look.snow ? 's' : ''), 8, 14, 3, 14, g => { drawStake(g); sn(g); });
     case 'sign':    return cached('sign' + (look.snow ? 's' : ''), 16, 18, 8, 18, g => { drawSign(g); sn(g); });
     case 'market': return cached('market' + lk, 80, 48, 0, 48, g => { drawMarket(g, 0, 0); sn(g); });

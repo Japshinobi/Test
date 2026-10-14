@@ -186,7 +186,8 @@ const SECTIONS = [
       figs:() => [0, 1, 2, 3].map(st => fig(sprite(32, 44, g => { S.drawSoil(g, 8, 28, false); g.drawImage(S.sprite('crop', k, st).img, 0, 0); }), k === 'apple' ? ['саженец', 'молодая', 'взрослая', 'с яблоками'][st] : STAGES[st]))}))
   },
   {id:'items', title:'Предметы', desc:'Иконки в поясе инструментов и на рынке. Рисуются в клетке 16 × 16, в игре показываются вдвое крупнее.', items:[
-    {id:'tools', name:'Инструменты', meta:'16 × 16', figs:() => [fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('hoe'), 0, 0)), 'мотыга'), fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('can'), 0, 0)), 'лейка')]},
+    {id:'tools', name:'Инструменты', meta:'16 × 16', wide:true, figs:() => [['hoe', 'мотыга'], ['can', 'лейка'], ['axe', 'топор'], ['pick', 'кирка'], ['scythe', 'коса']].map(([k, n]) => fig(sprite(16, 16, g => g.drawImage(S.iconCanvas(k), 0, 0)), n))},
+    {id:'materials', name:'Материалы', meta:'16 × 16 · дрова с деревьев, пней и веток, камень с валунов', figs:() => [['wood', 'дрова'], ['stone', 'камень']].map(([k, n]) => fig(sprite(16, 16, g => g.drawImage(S.iconCanvas(k), 0, 0)), n))},
     {id:'seeds', name:'Семена и саженцы', meta:'16 × 16 · пакетик с цветной полосой', wide:true, figs:() => KEYS.map(k => fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('seed', k), 0, 0)), CROPS[k].name.toLowerCase()))},
     {id:'produce', name:'Урожай', meta:'16 × 16', wide:true, figs:() => KEYS.map(k => fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('prod', k), 0, 0)), CROPS[k].product.toLowerCase()))},
     {id:'upgrades', name:'Улучшения', meta:'16 × 16 · иконки в лавке', figs:() => [fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('field'), 0, 0)), 'участок'), fig(sprite(16, 16, g => g.drawImage(S.iconCanvas('house'), 0, 0)), 'ремонт')]}
@@ -194,6 +195,7 @@ const SECTIONS = [
   {id:'objects', title:'Постройки и объекты', desc:'Всё, что стоит на карте и мешает пройти: дом, рынок, колодец, деревья, кусты, забор.', items:[
     {id:'house', name:'Дедушкин дом', meta:'64 × 60, стоит на 4 × 3 клетках · до и после ремонта', wide:true, figs:() => [fig(obj('house', false), 'старый'), fig(obj('house', true), 'после ремонта')]},
     {id:'market', name:'Рынок тёти Гали', meta:'80 × 48 · пока убран из игры, вернётся вместе с продавцом', wide:true, figs:() => [fig(obj('market'), '')]},
+    {id:'debris', name:'Камни, ветки и пни', meta:'камень 16 × 12 (кирка, 2 удара) · ветки 16 × 8 (топор, 1 удар) · пень 16 × 10 (топор, 2 удара)', wide:true, figs:() => [fig(obj('rock'), 'камень'), fig(obj('twigs'), 'ветки'), fig(obj('stump'), 'пень')]},
     {id:'well', name:'Колодец', meta:'16 × 28, навес выше клетки', figs:() => [fig(obj('well'), '')]},
     {id:'tree', name:'Деревья и куст', meta:'32 × 40, крона шире и выше клетки · куст 20 × 16', wide:true, figs:() => [fig(obj('tree', 0), 'раскидистое'), fig(obj('tree', 1), 'высокое'), fig(obj('bush'), 'куст')]},
     {id:'yard', name:'Двор и стройплощадки', wide:true, meta:'ящик для отгрузки 16 × 16 · почтовый ящик 12 × 22 · табличка 16 × 18 · колышек 8 × 14 · площадка под постройку', figs:() => [fig(obj('bin'), 'отгрузка'), fig(obj('mailbox'), 'почта'), fig(obj('sign'), 'табличка'), fig(obj('stake'), 'колышек'), fig(sprite(32, 16, g => { S.drawSite(g, 0, 0); S.drawSite(g, 1, 0); }), 'стройплощадка')]},
@@ -221,6 +223,7 @@ const SECTIONS = [
   ]},
   {id:'ui', title:'Интерфейс', desc:'Панели, ячейки и шрифты в стиле Террарии: синие окна, золотые рамки, белый текст с тёмной тенью. Заголовки набраны пиксельным шрифтом Press Start 2P, остальной текст — Rubik.', items:[
     {id:'ui-colors', name:'Цвета интерфейса', meta:'фон, панели, рамки, акценты', wide:true, figs:() => [['#0f1638', 'ночное небо'], ['#2c3c8c', 'панель'], ['#3d4fa8', 'ячейка'], ['#151b4a', 'рамка'], ['#ffd24a', 'золото'], ['#2f9e3a', 'кнопка']].map(([c, n]) => fig(sprite(8, 8, g => { g.fillStyle = c; g.fillRect(0, 0, 8, 8); }), n))},
+    {id:'ui-equip', name:'Ячейки экипировки', meta:'силуэты пустых ячеек в инвентаре', figs:() => [['eq-head', 'голова'], ['eq-body', 'тело'], ['eq-legs', 'штаны'], ['eq-feet', 'обувь']].map(([k, n]) => fig(sprite(16, 16, g => { g.fillStyle = '#3d4fa8'; g.fillRect(0, 0, 16, 16); g.drawImage(S.iconCanvas(k), 0, 0); }), n))},
     {id:'ui-slot', name:'Ячейка пояса', meta:'выбранная обведена золотом', figs:() => {
       const slot = sel => { const c = sprite(22, 22, g => { g.fillStyle = '#151b4a'; g.fillRect(0, 0, 22, 22); g.fillStyle = sel ? '#ffd24a' : '#151b4a'; g.fillRect(0, 0, 22, 22); g.fillStyle = sel ? '#3d4fa8' : '#2c3c8c'; g.fillRect(1, 1, 20, 20); g.drawImage(S.iconCanvas('can'), 3, 3); }); return c; };
       return [fig(slot(false), 'обычная'), fig(slot(true), 'выбрана')];

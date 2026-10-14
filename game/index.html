@@ -39,7 +39,7 @@ body{font-family:var(--f-ui);font-size:15px;line-height:1.4}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .holding{font-size:13px;color:var(--muted);text-align:center;text-shadow:1px 1px 0 #000,0 0 4px #000}
 .holding b{color:var(--text);font-weight:500}
-.belt{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:3px}
+.belt{display:grid;grid-template-columns:repeat(12,minmax(0,56px));justify-content:center;gap:3px}
 .slot{position:relative;background:var(--glass-2);border:2px solid var(--edge);border-radius:6px;padding:7px 0 5px;display:flex;justify-content:center;cursor:pointer;min-width:0;color:var(--text);font:inherit;text-shadow:1px 1px 0 #000}
 .slot canvas{width:28px;height:28px;image-rendering:pixelated}
 .slot.off::after{content:'';position:absolute;inset:3px;border-radius:4px;background:repeating-linear-gradient(135deg,transparent 0 5px,rgba(15,22,56,.45) 5px 7px);pointer-events:none}
@@ -87,6 +87,17 @@ body{font-family:var(--f-ui);font-size:15px;line-height:1.4}
 .row .sub{font-size:13px;color:var(--muted)}
 .row .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .up{color:var(--up)} .down{color:var(--down)}
+.panel[data-kind="bag"]{max-width:780px}
+.inv-wrap{display:grid;grid-template-columns:170px minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:600px){.inv-wrap{grid-template-columns:minmax(0,1fr)}}
+.equip{background:rgba(21,27,74,.55);border:2px solid var(--edge);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.doll{display:flex;justify-content:center;padding:8px 0;background:rgba(15,22,56,.6);border-radius:6px}
+.doll canvas{width:64px;height:96px;image-rendering:pixelated}
+.eqs{display:flex;flex-direction:column;gap:6px}
+.eq{display:grid;grid-template-columns:36px minmax(0,1fr);gap:8px;align-items:center;background:var(--panel-2);border:2px dashed rgba(170,180,232,.45);border-radius:6px;padding:4px 6px}
+.eq canvas{width:32px;height:32px;image-rendering:pixelated}
+.eqn{font-size:14px;font-weight:500}
+.eqv{font-size:12px;color:var(--muted)}
 .inv{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
 .cell{position:relative;font:inherit;font-size:13px;color:var(--text);background:var(--panel-2);border:2px solid var(--edge);border-radius:6px;padding:8px 4px 6px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;text-shadow:1px 1px 0 #000;min-width:0}
 .cell:disabled{cursor:default;opacity:1}
@@ -115,7 +126,7 @@ body{font-family:var(--f-ui);font-size:15px;line-height:1.4}
       <div class="chip goal"><span class="k" id="goalTxt">Ремонт дома</span><span class="bar"><i id="goalBar"></i></span></div>
     </div>
     <div class="tools">
-      <button class="mini" id="bagBtn" type="button">Сумка (I)</button>
+      <button class="mini" id="bagBtn" type="button">Инвентарь (I)</button>
       <button class="mini" id="helpBtn" type="button">Справка</button>
       <button class="mini" id="soundBtn" type="button">Звук: вкл</button>
     </div>
@@ -135,7 +146,7 @@ body{font-family:var(--f-ui);font-size:15px;line-height:1.4}
   <div class="bottom">
     <div class="holding" id="holding"></div>
     <div class="belt" id="belt"></div>
-    <div class="kbd">Стрелки или WASD — ходить · Пробел или E — действие · 1–0 − = — предмет · I — сумка · Щелчок по клетке — подойти и сделать</div>
+    <div class="kbd">Стрелки или WASD — ходить · Пробел или E — действие · 1–0 − = — предмет · I — инвентарь · Щелчок по клетке — подойти и сделать</div>
   </div>
 </div>
 
@@ -167,13 +178,20 @@ window.addEventListener('resize', resize);
 
 const {C, CROPS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, drawSite, clearCache, hash, drawGrass, drawPath, drawDirt, decoKind, fenceMask, cropStage, drawSoil, drawWater, iconCanvas, sprite, sunAt, castShadow, applyLight} = window.OgorodSprites;
 const KEYS = Object.keys(CROPS);
-const TOOLS = [{id:'hoe', name:'Мотыга'}, {id:'can', name:'Лейка'}, ...KEYS.map(k => ({id:'seed', k, name:CROPS[k].seedName}))];
+const TOOLS = [{id:'hoe', name:'Мотыга'}, {id:'can', name:'Лейка'}, {id:'axe', name:'Топор'}, {id:'pick', name:'Кирка'}, {id:'scythe', name:'Коса'},
+  ...KEYS.map(k => ({id:'seed', k, name:CROPS[k].seedName}))];
+const N_TOOLS = 5;
+const seedSlot = k => TOOLS.findIndex(t => t.k === k);
+/* materials from chopping and mining */
+const RES = {wood:{name:'Дрова'}, stone:{name:'Камень'}};
+/* equipment slots; items for them come later */
+const EQUIP = [{id:'head', name:'Голова'}, {id:'body', name:'Тело'}, {id:'legs', name:'Штаны'}, {id:'feet', name:'Обувь'}];
 const UPGRADES = [
   {id:'can',   name:'Большая лейка',     sub:'Вмещает 30 л вместо 10',            cost:250},
   {id:'house', name:'Отремонтировать дом', sub:'Главная цель: вернуть дому жизнь', cost:GOAL}
 ];
 const DIRS = {up:[0,-1], down:[0,1], left:[-1,0], right:[1,0]};
-const WALK = '.,=P', INTERACT = 'DWSX~HI';
+const WALK = '.,=P', INTERACT = 'DWSX~HITRKU';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -183,7 +201,7 @@ function newState() {
   KEYS.forEach(k => { seeds[k] = 0; produce[k] = 0; });
   seeds.radish = 6; seeds.potato = 3;
   return {v:1, day:1, min:360, money:100, water:10, cap:10, house:false, loc:'farm', shipped:{},
-          plots:{}, seeds, produce, tool:0, px:14, py:9, face:'down', mapV:2, intro:false, lateWarned:false, snowCover:false, snowTrod:{}};
+          plots:{}, seeds, produce, tool:0, px:14, py:9, face:'down', mapV:2, toolsV:2, res:{wood:0, stone:0}, mods:{}, equip:{head:null, body:null, legs:null, feet:null}, intro:false, lateWarned:false, snowCover:false, snowTrod:{}};
 }
 function merge(s) {
   const b = newState();
@@ -195,7 +213,12 @@ function merge(s) {
   o.snowTrod = s.snowTrod && typeof s.snowTrod === 'object' ? s.snowTrod : {};
   o.shipped = s.shipped && typeof s.shipped === 'object' ? s.shipped : {};
   if (!LOCATIONS[o.loc]) o.loc = 'farm';
-  o.mapV = s.mapV;  /* a save from before the big farm has none: start() moves its beds */
+  o.mapV = s.mapV;
+  o.res = {...b.res, ...(s.res || {})};
+  o.mods = s.mods && typeof s.mods === 'object' ? s.mods : {};
+  o.equip = {...b.equip, ...(s.equip || {})};
+  /* saves from before the new tools: the belt order changed, take the hoe */
+  if (s.toolsV !== 2) { o.tool = 0; o.toolsV = 2; }  /* a save from before the big farm has none: start() moves its beds */
   return o;
 }
 let state, player, map = [], bg = null, bgDirty = true, panelOpen = false, panelHandler = null, panelClosable = true;
@@ -250,6 +273,13 @@ function buildMap() {
   Object.keys(L.signs || {}).forEach(k => { const [x, y] = k.split(',').map(Number); set(x, y, 'I'); });
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++)
     if (map[y][x] === '.' && hash(x, y, 7 + W) < 0.09) map[y][x] = ',';
+  /* what Тёма has changed here: felled trees, broken stones, mown flowers */
+  const mods = state.mods[state.loc] || {};
+  for (const key in mods) { const [x, y] = key.split(',').map(Number); set(x, y, mods[key]); }
+}
+function modTile(x, y, ch) {
+  (state.mods[state.loc] = state.mods[state.loc] || {})[x + ',' + y] = ch;
+  map[y][x] = ch; buildObjects();
 }
 /* building sites on the farm: one greenhouse and three for a chicken coop or a barn */
 const SITES = [
@@ -279,6 +309,13 @@ function buildFarm(set, rect) {
     const corner = (x > 58 && y < 14) || (x < 20 && y > 38) || (x > 60 && y > 34) || (x < 8 && y < 10);
     const r = hash(x, y, 501);
     if (r < (corner ? 0.3 : 0.035)) set(x, y, 'T'); else if (r < (corner ? 0.36 : 0.05)) set(x, y, 'B');
+    else if (r < (corner ? 0.4 : 0.075)) set(x, y, 'R'); else if (r < (corner ? 0.44 : 0.095)) set(x, y, 'K');
+  }
+  /* a few stones and branches in the open field too, left where nothing grows yet */
+  for (let y = 10; y <= 22; y++) for (let x = 18; x <= 56; x++) {
+    if (map[y][x] !== '.' || state.plots[x + ',' + y]) continue;
+    const r = hash(x, y, 503);
+    if (r < 0.02) set(x, y, 'R'); else if (r < 0.035) set(x, y, 'K');
   }
 }
 function buildForest(set, rect) {
@@ -342,7 +379,10 @@ function buildObjects() {
   objects = [];
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const ch = map[y][x], px = x * T + T / 2, py = y * T + T;
-    if (ch === 'T') objects.push({kind:'tree', a:hash(x, y, 11) < 0.35 ? 1 : 0, px, py});
+    if (ch === 'T') objects.push({kind:'tree', a:hash(x, y, 11) < 0.35 ? 1 : 0, px, py, tx:x, ty:y});
+    else if (ch === 'R') objects.push({kind:'rock', px, py, tx:x, ty:y});
+    else if (ch === 'K') objects.push({kind:'twigs', px, py, tx:x, ty:y});
+    else if (ch === 'U') objects.push({kind:'stump', px, py, tx:x, ty:y});
     else if (ch === 'B') objects.push({kind:'bush', px, py});
     else if (ch === 'W') objects.push({kind:'well', px, py});
     else if (ch === 'S') objects.push({kind:'bin', px, py});
@@ -410,7 +450,7 @@ function update(dt) {
 /* switching locations */
 const fade = {a:0, dir:0, to:null};
 function enterLocation(id, at, face) {
-  state.loc = id; state.px = at[0]; state.py = at[1]; state.face = face;
+  state.loc = id; state.px = at[0]; state.py = at[1]; state.face = face; hits = {};
   buildMap(); refreshLook(); player = makePlayer(); particles = [];
   save();
 }
@@ -435,6 +475,9 @@ function act(tx, ty) {
   if (c === 'H') return toast(state.house ? 'Дедушкин дом. Теперь в нём тепло и уютно.' : 'Дедушкин дом. Крыша течёт, доски скрипят. Нужен ремонт.');
   const tool = TOOLS[state.tool];
   const key = tx + ',' + ty, pl = plotAt(tx, ty), sid = season().id;
+  if (pl && pl.c && pl.c.dead) { pl.c = null; SFX.till(); puff(tx, ty, '#8a6a3a', 8); return toast('Увядшее растение убрано. Грядка свободна.'); }
+  if (pl && pl.c && pl.c.ripe) return harvest(tx, ty, pl);
+  if ('TURK'.includes(c) || (c === ',' && tool.id === 'scythe') || ['axe', 'pick', 'scythe'].includes(tool.id)) return useTool(tool.id, tx, ty, c, pl);
   if (!pl && !farmable(tx, ty)) {
     if (tool.id !== 'can' && (c === '.' || c === ',' || c === '=')) {
       SFX.nope();
@@ -442,7 +485,6 @@ function act(tx, ty) {
     }
     return;
   }
-  if (pl && pl.c && pl.c.dead) { pl.c = null; SFX.till(); puff(tx, ty, '#8a6a3a', 8); return toast('Увядшее растение убрано. Грядка свободна.'); }
   if (pl && pl.c && pl.c.ripe) return harvest(tx, ty, pl);
   if (sid === 'winter' && tool.id !== 'can') { SFX.nope(); return toast('Зимой земля промёрзла. Огород отдыхает до весны.'); }
   if (tool.id === 'hoe') {
@@ -465,6 +507,41 @@ function act(tx, ty) {
   if (state.seeds[k] <= 0) { SFX.nope(); return toast('Закончилось: ' + d.seedName.toLowerCase() + '. Купите на рынке.'); }
   if (!canPlant(k, sid)) { SFX.nope(); return toast(d.name + ': сажают в сезон «' + seasonNames(d.plant || d.seasons) + '». Сейчас ' + season().name.toLowerCase() + '.'); }
   state.seeds[k]--; pl.c = {k, age:0, ripe:false, grown:false}; SFX.plant(); puff(tx, ty, '#4a2c16', 4);
+}
+
+/* axe, pickaxe and scythe. Blows add up: a tree falls after 3, a stump after 2, a stone breaks after 2 */
+let hits = {}, shake = {key:'', t:0};
+const NEED = {T:3, U:2, R:2, K:1};
+function useTool(id, tx, ty, c, pl) {
+  const key = tx + ',' + ty, edge = tx === 0 || ty === 0 || tx === W - 1 || ty === H - 1;
+  if (c === 'T' || c === 'U' || c === 'K') {
+    if (id !== 'axe') { SFX.nope(); return toast(c === 'T' ? 'Дерево рубят топором.' : c === 'U' ? 'Пень выкорчёвывают топором.' : 'Ветки рубят топором.'); }
+    if (c === 'T' && edge) { SFX.nope(); return toast('Это край леса: деревья вдоль границы не рубят.'); }
+    return strike(tx, ty, c, '#c99a66');
+  }
+  if (c === 'R') {
+    if (id !== 'pick') { SFX.nope(); return toast('Камень разбивают киркой.'); }
+    return strike(tx, ty, c, C.stoneL);
+  }
+  if (id === 'scythe') {
+    if (c === ',') { modTile(tx, ty, '.'); SFX.till(); puff(tx, ty, '#f5d33b', 6); return; }
+    if (pl && pl.c) return toast('Какие культуры убирать косой, решим позже.');
+    return toast('Здесь нечего косить.');
+  }
+  if (id === 'axe') return toast('Здесь нечего рубить.');
+  if (id === 'pick') return toast('Здесь нечего разбивать.');
+}
+function strike(tx, ty, c, dust) {
+  const key = tx + ',' + ty, n = (hits[key] || 0) + 1;
+  shake = {key, t:performance.now()};
+  (c === 'R' ? SFX.mine : SFX.chop)(); puff(tx, ty, dust, 5);
+  if (n < NEED[c]) { hits[key] = n; return; }
+  delete hits[key];
+  const gain = {T:['wood', 4], U:['wood', 2], K:['wood', 1], R:['stone', 2]}[c];
+  state.res[gain[0]] += gain[1];
+  modTile(tx, ty, c === 'T' ? 'U' : '.');
+  puff(tx, ty, dust, 12);
+  toast('+' + gain[1] + ' ' + RES[gain[0]].name.toLowerCase() + (c === 'T' ? '. Остался пень.' : ''));
 }
 
 function harvest(tx, ty, pl) {
@@ -544,7 +621,7 @@ overlay.addEventListener('click', e => { if (e.target === overlay && panelClosab
 const HOW = `
   <h3>Как играть</h3>
   <ol>
-    <li>Мотыгой вскопайте землю на любой траве своего огорода. Нельзя копать только во дворе у дома и на дорогах.</li>
+    <li>Мотыгой вскопайте землю на любой траве своего огорода. Нельзя копать только во дворе у дома и на дорогах. Камни разбивают киркой, деревья, пни и ветки рубят топором, цветы скашивают косой.</li>
     <li>Выберите семена и посадите их на вскопанную грядку.</li>
     <li>Полейте грядку из лейки. Воду набирают в колодце или пруду.</li>
     <li>Ночью растения подрастают. Без полива — вдвое медленнее.</li>
@@ -554,7 +631,7 @@ const HOW = `
     <li>Чтобы лечь спать и начать новый день, подойдите к двери дома.</li>
   </ol>
   <h3>Управление</h3>
-  <p class="small"><b>Клавиатура:</b> стрелки или WASD — ходить, Пробел или E — действие, I — сумка, 1–9, 0, − и = — выбрать предмет.<br>
+  <p class="small"><b>Клавиатура:</b> стрелки или WASD — ходить, Пробел или E — действие, I — инвентарь, 1–9, 0, − и = — выбрать предмет.<br>
   <b>Мышь и телефон:</b> нажмите на клетку — Тёма сам дойдёт и сделает действие выбранным предметом. Для точного управления на телефоне есть крестовина.</p>`;
 
 function openIntro() {
@@ -633,7 +710,7 @@ function openShip() {
   openPanel(`<h2>Ящик для отгрузки</h2>
     <p>Положите урожай в ящик. Утром его заберут, а деньги появятся у вас.</p>
     ${binList ? `<p>Уже в ящике: ${binList}. Утром получите ${inBin} мон.</p>` : ''}
-    ${body || '<p>В сумке нет урожая. Соберите его на огороде.</p>'}
+    ${body || '<p>В инвентаре нет урожая. Соберите его на огороде.</p>'}
     <div class="btns">${body ? `<button class="btn" data-ship="all:all" data-focus>Положить всё за ${total}</button>` : ''}<button class="btn alt" data-close>Закрыть</button></div>`, b => {
     if (!b.dataset.ship) return;
     const [k, q] = b.dataset.ship.split(':');
@@ -662,7 +739,7 @@ function openCatalog() {
       <div class="acts"><button class="btn sm" data-up="${u.id}" ${done || state.money < u.cost ? 'disabled' : ''}>${done ? 'Куплено' : u.cost + ' мон.'}</button></div></div>`;
   });
   openPanel(`<h2>Каталог семян почтой</h2>
-    <p>Пока в деревне нет лавки, всё нужное можно заказать по почте. Заказ сразу оказывается в сумке.</p>
+    <p>Пока в деревне нет лавки, всё нужное можно заказать по почте. Заказ сразу оказывается в инвентаре.</p>
     <div class="money">Монеты: <b>${state.money}</b></div>${body}
     <div class="btns"><button class="btn alt" data-close data-focus>Закрыть</button></div>`, b => {
     const ds = b.dataset;
@@ -681,22 +758,36 @@ function openCatalog() {
     save(); openCatalog();
   });
 }
-/* the bag: everything Тёма carries. Tap a tool or seeds to take them in hand */
+/* the inventory: equipment on the left, everything Тёма carries on the right. Tap a tool or seeds to take them in hand */
 function openInventory() {
   const cell = (i, icon, name, n, extra = '') => `<button class="cell${state.tool === i ? ' on' : ''}" ${i >= 0 ? `data-take="${i}"` : 'disabled'} type="button">
       <span data-icon="${icon}"></span><span class="cn">${name}</span>${n !== '' ? `<span class="cc">${n}</span>` : ''}${extra}</button>`;
-  const tools = cell(0, 'hoe', 'Мотыга', '') + cell(1, 'can', 'Лейка', state.water + '/' + state.cap);
-  const seeds = KEYS.map((k, j) => state.seeds[k] ? cell(j + 2, 'seed:' + k, CROPS[k].name, state.seeds[k], canPlant(k, season().id) ? '' : '<span class="cs">не сезон</span>') : '').join('');
+  const tools = TOOLS.slice(0, N_TOOLS).map((t, i) => cell(i, t.id, t.name, t.id === 'can' ? state.water + '/' + state.cap : '')).join('');
+  const seeds = KEYS.map(k => state.seeds[k] ? cell(seedSlot(k), 'seed:' + k, CROPS[k].name, state.seeds[k], canPlant(k, season().id) ? '' : '<span class="cs">не сезон</span>') : '').join('');
   const prod = KEYS.map(k => state.produce[k] ? cell(-1, 'prod:' + k, CROPS[k].product, state.produce[k]) : '').join('');
-  openPanel(`<h2>Сумка</h2>
-    <div class="money">Монеты: <b>${state.money}</b></div>
-    <h3>Инструменты</h3><div class="inv">${tools}</div>
-    <h3>Семена</h3>${seeds ? `<div class="inv">${seeds}</div>` : '<p class="small">Семян нет. Закажите их в почтовом ящике у дома.</p>'}
-    <h3>Урожай</h3>${prod ? `<div class="inv">${prod}</div>` : '<p class="small">Урожая пока нет.</p>'}
-    <p class="small">Нажмите на инструмент или семена, чтобы взять их в руки. Урожай продают через ящик для отгрузки у дома.</p>
+  const res = Object.keys(RES).map(r => state.res[r] ? cell(-1, r, RES[r].name, state.res[r]) : '').join('');
+  const equip = EQUIP.map(e => `<div class="eq"><span data-icon="eq-${e.id}"></span><div><div class="eqn">${e.name}</div><div class="eqv">${state.equip[e.id] || 'пусто'}</div></div></div>`).join('');
+  openPanel(`<h2>Инвентарь</h2>
+    <div class="inv-wrap">
+      <aside class="equip">
+        <div class="doll" data-doll></div>
+        <div class="eqs">${equip}</div>
+        <p class="small">Экипировка появится позже: одежда будет давать бонусы и менять внешность Тёмы.</p>
+      </aside>
+      <div class="inv-main">
+        <div class="money">Монеты: <b>${state.money}</b></div>
+        <h3>Инструменты</h3><div class="inv">${tools}</div>
+        <h3>Семена</h3>${seeds ? `<div class="inv">${seeds}</div>` : '<p class="small">Семян нет. Закажите их в почтовом ящике у дома.</p>'}
+        <h3>Урожай</h3>${prod ? `<div class="inv">${prod}</div>` : '<p class="small">Урожая пока нет.</p>'}
+        <h3>Материалы</h3>${res ? `<div class="inv">${res}</div>` : '<p class="small">Пока пусто. Дрова дают деревья, пни и ветки, камень — валуны.</p>'}
+        <p class="small">Нажмите на инструмент или семена, чтобы взять их в руки. Урожай продают через ящик для отгрузки у дома.</p>
+      </div>
+    </div>
     <div class="btns"><button class="btn alt" data-close data-focus>Закрыть (I)</button></div>`, b => {
     if (b.dataset.take) { state.tool = +b.dataset.take; hud(); closePanel(); }
   });
+  const doll = panel.querySelector('[data-doll]');
+  if (doll) { const o = sprite('player', 'down', 0), c = document.createElement('canvas'); c.width = o.w; c.height = o.h; c.getContext('2d').drawImage(o.img, 0, 0); doll.append(c); }
   panel.dataset.kind = 'bag';
 }
 
@@ -721,7 +812,9 @@ const SFX = {
   plant: () => beep(440, .07, 'triangle', .07),
   harvest: () => { beep(660, .07, 'square', .04); setTimeout(() => beep(880, .1, 'square', .04), 70); },
   coin: () => { beep(988, .05, 'square', .04); setTimeout(() => beep(1319, .12, 'square', .04), 50); },
-  nope: () => beep(110, .12, 'sawtooth', .03)
+  nope: () => beep(110, .12, 'sawtooth', .03),
+  chop: () => { beep(240, .06, 'square', .06, -90); setTimeout(() => beep(180, .05, 'triangle', .05), 40); },
+  mine: () => { beep(520, .04, 'square', .05, -200); setTimeout(() => beep(300, .06, 'sawtooth', .03, -100), 30); }
 };
 
 /* ---------- HUD ---------- */
@@ -744,28 +837,37 @@ function hud() {
   setText(els.basket, String(KEYS.reduce((s, k) => s + state.produce[k], 0)));
   if (state.house) { setText(els.goalTxt, 'Дом отремонтирован'); els.goalBar.style.width = '100%'; }
   else { setText(els.goalTxt, 'Ремонт дома: ' + Math.min(state.money, GOAL) + '/' + GOAL); els.goalBar.style.width = Math.min(100, state.money / GOAL * 100) + '%'; }
-  const sig = state.day + '|' + state.tool + '|' + state.water + '|' + state.cap + '|' + KEYS.map(k => state.seeds[k]).join(',');
+  const sig = state.day + '|' + state.tool + '|' + state.res.wood + '|' + state.water + '|' + state.cap + '|' + KEYS.map(k => state.seeds[k]).join(',');
   if (sig !== beltSig) { beltSig = sig; updateBelt(); }
 }
 const belt = $('#belt'), slots = [];
+/* the belt holds every tool and the seeds you have, up to 12 slots; everything is in the inventory */
+const SLOT_LABELS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '−', '='];
+let beltItems = [];
+function beltList() {
+  const seeds = TOOLS.map((t, i) => i).filter(i => i >= N_TOOLS && (state.seeds[TOOLS[i].k] > 0 || i === state.tool));
+  return [...Array(N_TOOLS).keys(), ...seeds].slice(0, 12);
+}
 function buildBelt() {
+  beltItems = beltList();
   belt.innerHTML = ''; slots.length = 0;
-  TOOLS.forEach((t, i) => {
-    const b = document.createElement('button');
+  belt.style.gridTemplateColumns = `repeat(${beltItems.length}, minmax(0, 56px))`;
+  beltItems.forEach((ti, i) => {
+    const t = TOOLS[ti], b = document.createElement('button');
     b.type = 'button'; b.className = 'slot'; b.title = t.name;
     b.append(iconCanvas(t.id === 'seed' ? 'seed' : t.id, t.k));
-    const key = document.createElement('span'); key.className = 'key'; key.textContent = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '−', '='][i] || '';
+    const key = document.createElement('span'); key.className = 'key'; key.textContent = SLOT_LABELS[i];
     const n = document.createElement('span'); n.className = 'n';
     b.append(key, n);
-    b.addEventListener('click', () => { state.tool = i; ensureAudio(); hud(); });
-    belt.append(b); slots.push({b, n});
+    b.addEventListener('click', () => { state.tool = ti; ensureAudio(); hud(); });
+    belt.append(b); slots.push({b, n, ti});
   });
-  beltSig = '';
 }
 function updateBelt() {
-  TOOLS.forEach((t, i) => {
-    const s = slots[i]; if (!s) return;
-    s.b.setAttribute('aria-pressed', String(state.tool === i));
+  if (beltList().join() !== beltItems.join()) buildBelt();
+  slots.forEach(s => {
+    const t = TOOLS[s.ti];
+    s.b.setAttribute('aria-pressed', String(state.tool === s.ti));
     let label = '';
     if (t.id === 'can') label = String(state.water);
     if (t.id === 'seed') label = String(state.seeds[t.k]);
@@ -778,6 +880,9 @@ function updateBelt() {
   let h = '';
   if (t.id === 'hoe') h = '<b>Мотыга</b> — вскопать землю на огороде';
   else if (t.id === 'can') h = `<b>Лейка</b> — ${state.water}/${state.cap} л. Полить грядку. Воду набирают в колодце или пруду`;
+  else if (t.id === 'axe') h = '<b>Топор</b> — рубить деревья, пни и ветки';
+  else if (t.id === 'pick') h = '<b>Кирка</b> — разбивать камни';
+  else if (t.id === 'scythe') h = '<b>Коса</b> — скашивать цветы и траву';
   else { const d = CROPS[t.k]; h = `<b>${d.seedName}</b> — ${state.seeds[t.k]} шт. Сезон: ${seasonNames(d.plant || d.seasons)}${canPlant(t.k, season().id) ? '' : ' (сейчас не сезон)'}, растёт ${d.grow} ${plural(d.grow, 'день', 'дня', 'дней')}`; }
   els.holding.innerHTML = 'В руках: ' + h;
 }
@@ -819,7 +924,7 @@ function render(now) {
   /* everything standing on the ground this frame */
   const list = [];
   const inView = (px, py) => px > cam.x - 96 && px < cam.x + viewW + 48 && py > cam.y - 8 && py < cam.y + viewH + 64;
-  objects.forEach(o => { if (inView(o.px, o.py) && !(o.kind === 'flower' && plotAt(o.tx, o.ty))) list.push({o:sprite(o.kind, o.kind === 'house' ? state.house : o.a, o.b, look), px:o.px, py:o.py}); });
+  objects.forEach(o => { if (inView(o.px, o.py) && !(o.kind === 'flower' && plotAt(o.tx, o.ty))) list.push({o:sprite(o.kind, o.kind === 'house' ? state.house : o.a, o.b, look), px:o.px, py:o.py, key:o.tx + ',' + o.ty}); });
   for (let y = y0; y <= Math.min(H - 1, y1 + 2); y++) for (let x = x0; x <= x1; x++) {
     const pl = plotAt(x, y);
     if (pl && pl.c) list.push({o:pl.c.dead ? sprite('dead', 0, 0, look) : sprite('crop', pl.c.k, cropStage(pl.c), look), px:x * T + T / 2, py:y * T + T});
@@ -836,7 +941,8 @@ function render(now) {
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = sun.alpha; ctx.drawImage(shadowCv, 0, 0); ctx.restore();
   }
   list.sort((a, b) => a.py - b.py || (a.me ? 1 : 0) - (b.me ? 1 : 0) || a.px - b.px);
-  list.forEach(it => ctx.drawImage(it.o.img, it.px - it.o.ax, it.py - it.o.ay));
+  const sk = now - shake.t < 220 ? Math.round(Math.sin((now - shake.t) / 22)) : 0;
+  list.forEach(it => ctx.drawImage(it.o.img, it.px - it.o.ax + (sk && it.key === shake.key ? sk : 0), it.py - it.o.ay));
   particles.forEach(q => { ctx.fillStyle = q.c; ctx.fillRect(Math.round(q.x), Math.round(q.y), 2, 2); });
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if (weatherFor(state.day) === 'snow') drawSnowfall(now);
@@ -870,7 +976,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyI') { e.preventDefault(); openInventory(); return; }
   if (e.code === 'Space' || e.code === 'KeyE') { e.preventDefault(); if (!e.repeat) frontAct(); return; }
   const slot = SLOT_KEYS.indexOf(e.code.replace('Numpad', 'Digit'));
-  if (slot >= 0 && slot < TOOLS.length) { state.tool = slot; hud(); }
+  if (slot >= 0 && slot < beltItems.length) { state.tool = beltItems[slot]; hud(); }
 });
 window.addEventListener('keyup', e => { const d = KEYDIR[e.code]; if (d) { const i = held.indexOf(d); if (i >= 0) held.splice(i, 1); } });
 window.addEventListener('blur', () => { held.length = 0; });
@@ -904,7 +1010,7 @@ cv.addEventListener('pointerdown', e => {
   if (!inMap(tx, ty)) return;
   const p = player, sx = p.moving ? p.tx : p.x, sy = p.moving ? p.ty : p.y, ch = map[ty][tx];
   const tl = TOOLS[state.tool].id;
-  if (INTERACT.includes(ch) || plotAt(tx, ty) || (farmable(tx, ty) && tl !== 'can')) {
+  if (INTERACT.includes(ch) || plotAt(tx, ty) || (ch === ',' && tl === 'scythe') || (farmable(tx, ty) && (tl === 'hoe' || tl === 'seed'))) {
     const path = bfs(sx, sy, (x, y) => Math.abs(x - tx) + Math.abs(y - ty) === 1);
     if (!path) return toast('Туда не подойти.');
     held.length = 0; p.path = path; p.pending = {x:tx, y:ty};
