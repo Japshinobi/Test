@@ -87,6 +87,15 @@ body{font-family:var(--f-ui);font-size:15px;line-height:1.4}
 .row .sub{font-size:13px;color:var(--muted)}
 .row .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .up{color:var(--up)} .down{color:var(--down)}
+.inv{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
+.cell{position:relative;font:inherit;font-size:13px;color:var(--text);background:var(--panel-2);border:2px solid var(--edge);border-radius:6px;padding:8px 4px 6px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;text-shadow:1px 1px 0 #000;min-width:0}
+.cell:disabled{cursor:default;opacity:1}
+.cell.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+.cell:not(:disabled):hover{border-color:var(--gold)}
+.cell canvas{width:32px;height:32px;image-rendering:pixelated}
+.cell .cn{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cell .cc{position:absolute;top:3px;right:6px;color:var(--gold);font-variant-numeric:tabular-nums}
+.cell .cs{font-size:11px;color:var(--muted)}
 :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 @media (max-width:420px){.row{grid-template-columns:32px minmax(0,1fr)}.row .acts{grid-column:1 / -1;justify-content:flex-start}}
 @media (prefers-reduced-motion:reduce){.toast,.bar i{transition:none}}
@@ -98,6 +107,7 @@ body{font-family:var(--f-ui);font-size:15px;line-height:1.4}
   <div class="top">
     <div class="hud">
       <div class="chip"><span id="day">День 1</span></div>
+      <div class="chip"><span id="locName">Дедушкин огород</span></div>
       <div class="chip"><span id="clock">6:00</span><span class="k" id="part">утро</span></div>
       <div class="chip"><span class="k">Монеты</span><b id="money">100</b></div>
       <div class="chip"><span class="k">Вода</span><span id="water">10/10</span></div>
@@ -105,6 +115,7 @@ body{font-family:var(--f-ui);font-size:15px;line-height:1.4}
       <div class="chip goal"><span class="k" id="goalTxt">Ремонт дома</span><span class="bar"><i id="goalBar"></i></span></div>
     </div>
     <div class="tools">
+      <button class="mini" id="bagBtn" type="button">Сумка (I)</button>
       <button class="mini" id="helpBtn" type="button">Справка</button>
       <button class="mini" id="soundBtn" type="button">Звук: вкл</button>
     </div>
@@ -124,7 +135,7 @@ body{font-family:var(--f-ui);font-size:15px;line-height:1.4}
   <div class="bottom">
     <div class="holding" id="holding"></div>
     <div class="belt" id="belt"></div>
-    <div class="kbd">Стрелки или WASD — ходить · Пробел или E — действие · 1–0 − = — предмет · Щелчок по клетке — подойти и сделать</div>
+    <div class="kbd">Стрелки или WASD — ходить · Пробел или E — действие · 1–0 − = — предмет · I — сумка · Щелчок по клетке — подойти и сделать</div>
   </div>
 </div>
 
@@ -134,8 +145,9 @@ body{font-family:var(--f-ui);font-size:15px;line-height:1.4}
 <script>
 (() => {
 'use strict';
-const T = 16, ART = 32, W = 36, H = 22, GOAL = 2500, SAVE_KEY = 'dedushkin-ogorod-v2';
+const T = 16, ART = 32, GOAL = 2500, SAVE_KEY = 'dedushkin-ogorod-v2';
 const $ = s => document.querySelector(s);
+let W = 36, H = 22;
 const cv = $('#game'), ctx = cv.getContext('2d');
 
 /* Screen scale. The art grid is 32 pixels per tile (ART). One art pixel covers k×k screen pixels,
@@ -157,19 +169,11 @@ const {C, CROPS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFall
 const KEYS = Object.keys(CROPS);
 const TOOLS = [{id:'hoe', name:'Мотыга'}, {id:'can', name:'Лейка'}, ...KEYS.map(k => ({id:'seed', k, name:CROPS[k].seedName}))];
 const UPGRADES = [
-  {id:'field2', name:'Расчистить вторую треть',  sub:'Ещё 24 грядки в середине огорода', cost:150},
-  {id:'field3', name:'Расчистить последнюю треть', sub:'Ещё 24 грядки справа. Сначала нужна вторая треть', cost:300},
   {id:'can',   name:'Большая лейка',     sub:'Вмещает 30 л вместо 10',            cost:250},
   {id:'house', name:'Отремонтировать дом', sub:'Главная цель: вернуть дому жизнь', cost:GOAL}
 ];
-const GREET = [
-  'Здравствуй, Тёма! Что сегодня принёс?',
-  'О, внук Матвея пожаловал! Дед бы тобой гордился.',
-  'Свежие овощи у меня с руками отрывают. Показывай!',
-  'Семена свежие, только утром привезли.'
-];
 const DIRS = {up:[0,-1], down:[0,1], left:[-1,0], right:[1,0]};
-const WALK = '.,=fFG', INTERACT = 'fFGDWM~H';
+const WALK = '.,=', INTERACT = 'DWSX~HI';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -178,7 +182,7 @@ function newState() {
   const seeds = {}, produce = {};
   KEYS.forEach(k => { seeds[k] = 0; produce[k] = 0; });
   seeds.radish = 6; seeds.potato = 3;
-  return {v:1, day:1, min:360, money:100, water:10, cap:10, zones:1, house:false,
+  return {v:1, day:1, min:360, money:100, water:10, cap:10, house:false, loc:'farm', shipped:{},
           plots:{}, seeds, produce, tool:0, px:4, py:5, face:'down', intro:false, lateWarned:false, snowCover:false, snowTrod:{}};
 }
 function merge(s) {
@@ -189,6 +193,8 @@ function merge(s) {
   o.produce = {...b.produce, ...(s.produce || {})};
   o.plots = s.plots && typeof s.plots === 'object' ? s.plots : {};
   o.snowTrod = s.snowTrod && typeof s.snowTrod === 'object' ? s.snowTrod : {};
+  o.shipped = s.shipped && typeof s.shipped === 'object' ? s.shipped : {};
+  if (!LOCATIONS[o.loc]) o.loc = 'farm';
   return o;
 }
 let state, player, map = [], bg = null, bgDirty = true, panelOpen = false, panelHandler = null, panelClosable = true;
@@ -209,29 +215,81 @@ const inSeason = (k, sid) => CROPS[k].seasons.includes(sid);
 const canPlant = (k, sid) => (CROPS[k].plant || CROPS[k].seasons).includes(sid);
 const seasonNames = list => list.map(id => ({spring:'весна', summer:'лето', autumn:'осень', winter:'зима'})[id]).join(', ');
 
-/* ---------- map ---------- */
+/* ---------- locations ---------- */
+/* Every location is its own map. Exits are path tiles on the map edge: stepping onto one fades over to the next location.
+   at: where Тёма appears there. */
+const LOCATIONS = {
+  farm:   {name:'Дедушкин огород', W:36, H:22, build:buildFarm, exits:[
+            {x0:12, x1:13, y0:0, y1:0, to:'forest', at:[14, 18], face:'up'},
+            {x0:9, x1:10, y0:21, y1:21, to:'river', at:[14, 1], face:'down'},
+            {x0:35, x1:35, y0:15, y1:16, to:'road', at:[1, 7], face:'right'}]},
+  forest: {name:'Лес', W:30, H:20, build:buildForest, exits:[{x0:14, x1:15, y0:19, y1:19, to:'farm', at:[12, 1], face:'down'}],
+           signs:{'16,15':'Лес. Скоро здесь можно будет собирать грибы, ягоды и хворост.'}},
+  river:  {name:'Речка', W:30, H:18, build:buildRiver, exits:[{x0:14, x1:15, y0:0, y1:0, to:'farm', at:[9, 20], face:'up'}],
+           signs:{'17,5':'Речка. Скоро здесь появится рыбалка.'}},
+  road:   {name:'Дорога в деревню', W:30, H:14, build:buildRoad, exits:[{x0:0, x1:0, y0:7, y1:8, to:'farm', at:[34, 15], face:'left'}],
+           signs:{'25,5':'До деревни два километра. Деревня и её жители появятся позже.'}}
+};
+const loc = () => LOCATIONS[state.loc];
+function exitAt(x, y) { return (loc().exits || []).find(e => x >= e.x0 && x <= e.x1 && y >= e.y0 && y <= e.y1); }
+
 function buildMap() {
+  const L = loc(); W = L.W; H = L.H;
   map = Array.from({length:H}, () => Array(W).fill('.'));
   const set = (x, y, c) => { if (x >= 0 && y >= 0 && x < W && y < H) map[y][x] = c; };
   const rect = (x0, y0, x1, y1, c) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(x, y, c); };
   for (let x = 0; x < W; x++) { set(x, 0, 'T'); set(x, H - 1, 'T'); }
   for (let y = 0; y < H; y++) { set(0, y, 'T'); set(W - 1, y, 'T'); }
-  rect(2, 1, 5, 3, 'H'); set(4, 3, 'D');
-  set(9, 2, 'W');
-  rect(4, 4, 4, 15, '='); rect(4, 8, 7, 8, '='); rect(4, 15, 28, 15, '='); rect(28, 10, 28, 15, '='); rect(13, 12, 13, 15, '=');
-  for (let x = 7; x <= 20; x++) { set(x, 5, '#'); set(x, 12, '#'); }
-  for (let y = 5; y <= 12; y++) { set(7, y, '#'); set(20, y, '#'); }
-  set(7, 8, '='); set(13, 12, '=');
-  rect(8, 6, 11, 11, 'f');
-  rect(12, 6, 15, 11, state.zones >= 2 ? 'f' : 'F');
-  rect(16, 6, 19, 11, state.zones >= 3 ? 'f' : 'G');
-  rect(26, 7, 30, 9, 'M');
-  rect(1, 16, 5, 19, '~'); rect(6, 17, 6, 18, '~');
-  [[20,2],[24,2],[25,3],[14,2],[30,2],[33,3],[34,6],[32,12],[33,13],[34,17],[31,18],[26,18],[22,17],[17,18],[11,17],[14,19],[9,19],[23,11],[24,4],[2,12],[1,9]].forEach(([x, y]) => set(x, y, 'T'));
-  [[16,2],[6,10],[24,10],[8,16],[31,4],[19,19],[29,19]].forEach(([x, y]) => set(x, y, 'B'));
+  L.build(set, rect);
+  (L.exits || []).forEach(e => rect(e.x0, e.y0, e.x1, e.y1, '='));
+  Object.keys(L.signs || {}).forEach(k => { const [x, y] = k.split(',').map(Number); set(x, y, 'I'); });
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++)
-    if (map[y][x] === '.' && hash(x, y, 7) < 0.09) map[y][x] = ',';
+    if (map[y][x] === '.' && hash(x, y, 7 + W) < 0.09) map[y][x] = ',';
 }
+function buildFarm(set, rect) {
+  rect(2, 1, 5, 3, 'H'); set(4, 3, 'D');
+  set(9, 2, 'W'); set(6, 3, 'S'); set(3, 4, 'X');
+  /* paths: door → down to the road; road → right exit; a lane from the yard up to the top exit; a lane down to the bottom exit */
+  rect(4, 4, 4, 15, '='); rect(4, 15, 35, 15, '='); rect(34, 16, 35, 16, '=');
+  rect(4, 4, 12, 4, '='); rect(12, 0, 12, 4, '='); rect(13, 0, 13, 1, '=');
+  rect(9, 15, 9, 21, '='); rect(10, 20, 10, 21, '=');
+  rect(1, 16, 5, 19, '~'); rect(6, 17, 6, 18, '~');
+  [[20,2],[24,2],[25,3],[30,2],[33,3],[34,6],[32,12],[33,13],[34,18],[31,18],[26,18],[22,17],[17,18],[14,19],[2,12],[1,9],[23,9],[28,6],[16,8]].forEach(([x, y]) => set(x, y, 'T'));
+  [[16,2],[24,10],[8,17],[31,4],[19,19],[29,19],[6,10]].forEach(([x, y]) => set(x, y, 'B'));
+}
+function buildForest(set, rect) {
+  rect(14, 12, 15, 19, '='); rect(10, 7, 19, 11, ',');
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    if (map[y][x] !== '.') continue;
+    const r = hash(x, y, 201);
+    if (r < 0.33) set(x, y, 'T'); else if (r < 0.4) set(x, y, 'B');
+  }
+}
+function buildRiver(set, rect) {
+  rect(0, 9, W - 1, 11, '~'); rect(14, 0, 15, 8, '='); rect(10, 8, 19, 8, '=');
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    if (map[y][x] !== '.') continue;
+    const r = hash(x, y, 301);
+    if (r < 0.1) set(x, y, 'T'); else if (r < 0.14) set(x, y, 'B');
+  }
+}
+function buildRoad(set, rect) {
+  rect(0, 7, 27, 8, '='); rect(28, 6, 29, 9, 'T');
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    if (map[y][x] !== '.' || Math.abs(y - 7.5) < 2) continue;
+    const r = hash(x, y, 401);
+    if (r < 0.18) set(x, y, 'T'); else if (r < 0.24) set(x, y, 'B');
+  }
+}
+/* Where the hoe works: any grass on the farm, except the yard (the house and two tiles around it) */
+function farmable(x, y) {
+  if (state.loc !== 'farm' || !inMap(x, y)) return false;
+  const ch = map[y][x];
+  return (ch === '.' || ch === ',') && !(x <= 7 && y <= 5);
+}
+const plotAt = (x, y) => state.loc === 'farm' ? state.plots[x + ',' + y] : null;
+const trodKey = (x, y) => state.loc + ':' + x + ',' + y;
+
 const inMap = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
 const walkable = (x, y) => inMap(x, y) && WALK.includes(map[y][x]);
 
@@ -245,7 +303,6 @@ function buildGround(snow) {
     if (ch === '~') { g.fillStyle = C.water; g.fillRect(x * T, y * T, T, T); }
     else if (snow) drawSnow(g, x, y);
     else if (ch === '=') drawPath(g, x, y);
-    else if (ch === 'f') drawDirt(g, x, y);
     else { drawGrass(g, x, y, look.grass); if (look.fallen && hash(x, y, 13) < .7) drawFallen(g, x, y, look.fallen); }
   }
   return c;
@@ -263,18 +320,24 @@ function buildObjects() {
     if (ch === 'T') objects.push({kind:'tree', a:hash(x, y, 11) < 0.35 ? 1 : 0, px, py});
     else if (ch === 'B') objects.push({kind:'bush', px, py});
     else if (ch === 'W') objects.push({kind:'well', px, py});
-    else if (ch === '#') objects.push({kind:'fence', a:fenceMask(x, y, (a, b) => inMap(a, b) && map[b][a] === '#'), px, py});
-    else if (ch === 'F' || ch === 'G') objects.push({kind:'deco', a:decoKind(x, y), px, py});
-    else if (ch === ',' && look && look.flowers !== 'none' && !look.snow) objects.push({kind:'flower', a:x, b:y, px, py});
+    else if (ch === 'S') objects.push({kind:'bin', px, py});
+    else if (ch === 'X') objects.push({kind:'mailbox', px, py});
+    else if (ch === 'I') objects.push({kind:'sign', px, py});
+    else if (ch === ',' && look && look.flowers !== 'none' && !look.snow) objects.push({kind:'flower', a:x, b:y, px, py, tx:x, ty:y});
   }
-  objects.push({kind:'house', px:2 * T, py:4 * T});
-  objects.push({kind:'market', px:26 * T, py:10 * T});
+  if (state.loc === 'farm') objects.push({kind:'house', px:2 * T, py:4 * T});
 }
 
 /* ---------- game logic ---------- */
 function makePlayer() {
   let x = state.px, y = state.py;
-  if (!walkable(x, y)) { x = 4; y = 5; }
+  if (!walkable(x, y)) {
+    /* the saved spot is blocked: stand on the nearest free tile instead */
+    let best = null, bd = 1e9;
+    for (let yy = 0; yy < H; yy++) for (let xx = 0; xx < W; xx++)
+      if (walkable(xx, yy) && !exitAt(xx, yy)) { const d = Math.abs(xx - x) + Math.abs(yy - y); if (d < bd) { bd = d; best = [xx, yy]; } }
+    if (best) [x, y] = best;
+  }
   return {x, y, tx:x, ty:y, t:0, moving:false, face:state.face || 'down', path:[], pending:null, walk:0};
 }
 function dirTo(x, y, nx, ny) {
@@ -292,17 +355,36 @@ function update(dt) {
   particles = particles.filter(q => (q.life -= dt) > 0);
   particles.forEach(q => { q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 140 * dt; });
   if (panelOpen) return;
+  if (fade.dir) {
+    fade.a += fade.dir * dt * 4;
+    if (fade.dir > 0 && fade.a >= 1) { fade.a = 1; fade.dir = -1; enterLocation(fade.to.to, fade.to.at, fade.to.face); toast(loc().name); }
+    else if (fade.dir < 0 && fade.a <= 0) { fade.a = 0; fade.dir = 0; }
+    return;
+  }
   state.min += dt * 4;
-  if (state.min >= 1380 && !state.lateWarned) { state.lateWarned = true; toast('Уже 23:00. Пора домой — дверь дома в левом верхнем углу.'); }
+  if (state.min >= 1380 && !state.lateWarned) { state.lateWarned = true; toast(state.loc === 'farm' ? 'Уже 23:00. Пора домой — дверь дома в левом верхнем углу.' : 'Уже 23:00. Пора возвращаться домой.'); }
   if (state.min >= 1440) { newDay('Тёма так заработался, что уснул прямо на улице. Соседи проводили его до дома.'); return; }
   const p = player;
-  if (p.moving) { p.t += dt / 0.15; p.walk += dt; if (p.t >= 1) { p.x = p.tx; p.y = p.ty; p.moving = false; p.t = 0; if (state.snowCover) state.snowTrod[p.x + ',' + p.y] = 1; } }
+  if (p.moving) { p.t += dt / 0.15; p.walk += dt; if (p.t >= 1) {
+    p.x = p.tx; p.y = p.ty; p.moving = false; p.t = 0;
+    if (state.snowCover) state.snowTrod[trodKey(p.x, p.y)] = 1;
+    const ex = exitAt(p.x, p.y);
+    if (ex) { fade.dir = 1; fade.to = ex; held.length = 0; p.path = []; p.pending = null; return; }
+  } }
   if (!p.moving) {
     const d = held[held.length - 1];
     if (d) { p.path = []; p.pending = null; step(d); }
     else if (p.path.length) { const [nx, ny] = p.path.shift(); if (!step(dirTo(p.x, p.y, nx, ny))) { p.path = []; p.pending = null; } }
     else if (p.pending) { const {x, y} = p.pending; p.pending = null; p.face = dirTo(p.x, p.y, x, y) || p.face; act(x, y); }
   }
+}
+
+/* switching locations */
+const fade = {a:0, dir:0, to:null};
+function enterLocation(id, at, face) {
+  state.loc = id; state.px = at[0]; state.py = at[1]; state.face = face;
+  buildMap(); refreshLook(); player = makePlayer(); particles = [];
+  save();
 }
 
 function puff(tx, ty, color, n = 6) {
@@ -314,21 +396,24 @@ function act(tx, ty) {
   if (!inMap(tx, ty)) return;
   const c = map[ty][tx];
   if (c === 'D') return openSleep();
-  if (c === 'M') return openShop('sell');
+  if (c === 'S') return openShip();
+  if (c === 'X') return openCatalog();
+  if (c === 'I') return toast((loc().signs || {})[tx + ',' + ty] || 'Табличка.');
   if (c === 'W' || c === '~') {
     if (state.water >= state.cap) return toast('Лейка уже полная.');
     state.water = state.cap; SFX.water(); puff(tx, ty, C.waterL, 8);
     return toast('Лейка наполнена: ' + state.cap + ' л.');
   }
-  if (c === 'F') { SFX.nope(); return toast('Тут всё заросло. Расчистить вторую треть огорода можно на рынке за 150 монет.'); }
-  if (c === 'G') { SFX.nope(); return toast('Тут всё заросло. Эту треть можно расчистить на рынке за 300 монет, после второй.'); }
   if (c === 'H') return toast(state.house ? 'Дедушкин дом. Теперь в нём тепло и уютно.' : 'Дедушкин дом. Крыша течёт, доски скрипят. Нужен ремонт.');
   const tool = TOOLS[state.tool];
-  if (c !== 'f') {
-    if (tool.id !== 'can') { SFX.nope(); toast('Копать и сажать можно только на огороде за забором.'); }
+  const key = tx + ',' + ty, pl = plotAt(tx, ty), sid = season().id;
+  if (!pl && !farmable(tx, ty)) {
+    if (tool.id !== 'can' && (c === '.' || c === ',' || c === '=')) {
+      SFX.nope();
+      toast(state.loc !== 'farm' ? 'Копать можно только у себя на огороде.' : c === '=' ? 'На дороге копать нельзя.' : 'Во дворе у дома копать нельзя: отойдите на пару шагов.');
+    }
     return;
   }
-  const key = tx + ',' + ty, pl = state.plots[key], sid = season().id;
   if (pl && pl.c && pl.c.dead) { pl.c = null; SFX.till(); puff(tx, ty, '#8a6a3a', 8); return toast('Увядшее растение убрано. Грядка свободна.'); }
   if (pl && pl.c && pl.c.ripe) return harvest(tx, ty, pl);
   if (sid === 'winter' && tool.id !== 'can') { SFX.nope(); return toast('Зимой земля промёрзла. Огород отдыхает до весны.'); }
@@ -395,21 +480,23 @@ function newDay(note) {
     }
     pl.w = 0;
   }
+  /* the shipping bin is emptied overnight at yesterday's prices */
+  let shipped = 0;
+  KEYS.forEach(k => { shipped += (state.shipped[k] || 0) * price(k); });
+  state.money += shipped; state.shipped = {};
   state.day++; state.min = 360; state.lateWarned = false;
   /* snow: fresh snow covers yesterday's tracks; it melts when spring comes */
   if (season().id === 'winter') { if (snowed) { state.snowCover = true; state.snowTrod = {}; } }
   else { state.snowCover = false; state.snowTrod = {}; }
-  state.px = 4; state.py = 4; state.face = 'down';
-  player = makePlayer(); held.length = 0;
-  refreshLook();
-  save();
-  openMorning(note, ripened, dry, {changed, withered, snowed});
+  held.length = 0; fade.a = 0; fade.dir = 0;
+  enterLocation('farm', [4, 4], 'down');
+  openMorning(note, ripened, dry, {changed, withered, snowed, shipped});
 }
 
 /* ---------- panels ---------- */
 const overlay = $('#overlay'), panel = $('#panel');
 function openPanel(html, handler, closable = true) {
-  panel.innerHTML = html;
+  panel.innerHTML = html; panel.dataset.kind = '';
   panel.querySelectorAll('[data-icon]').forEach(el => { const [kind, k] = el.dataset.icon.split(':'); el.replaceWith(iconCanvas(kind, k)); });
   overlay.hidden = false; panelOpen = true; panelHandler = handler; panelClosable = closable; held.length = 0;
   if (player) { player.path = []; player.pending = null; }
@@ -429,22 +516,23 @@ overlay.addEventListener('click', e => { if (e.target === overlay && panelClosab
 const HOW = `
   <h3>Как играть</h3>
   <ol>
-    <li>Мотыгой вскопайте землю на расчищенной части огорода за забором (бурая земля слева). Остальные две трети заросли, их расчищают на рынке.</li>
+    <li>Мотыгой вскопайте землю на любой траве своего огорода. Нельзя копать только во дворе у дома и на дорогах.</li>
     <li>Выберите семена и посадите их на вскопанную грядку.</li>
     <li>Полейте грядку из лейки. Воду набирают в колодце или пруду.</li>
     <li>Ночью растения подрастают. Без полива — вдвое медленнее.</li>
     <li>Год делится на четыре сезона по ${SEASON_DAYS} дней. У каждой культуры свой сезон: когда он кончается, растение увядает. Зимой огород отдыхает, переживает её только яблоня.</li>
-    <li>Спелый урожай соберите и продайте тёте Гале на рынке справа (палатка с полосатым навесом).</li>
+    <li>Спелый урожай соберите и положите в ящик для отгрузки у дома: деньги придут утром. Семена и улучшения заказывают в синем почтовом ящике.</li>
+    <li>Дороги у края карты ведут в другие места: в лес (вверху), к речке (внизу) и в сторону деревни (справа).</li>
     <li>Чтобы лечь спать и начать новый день, подойдите к двери дома.</li>
   </ol>
   <h3>Управление</h3>
-  <p class="small"><b>Клавиатура:</b> стрелки или WASD — ходить, Пробел или E — действие, 1–9, 0, − и = — выбрать предмет.<br>
+  <p class="small"><b>Клавиатура:</b> стрелки или WASD — ходить, Пробел или E — действие, I — сумка, 1–9, 0, − и = — выбрать предмет.<br>
   <b>Мышь и телефон:</b> нажмите на клетку — Тёма сам дойдёт и сделает действие выбранным предметом. Для точного управления на телефоне есть крестовина.</p>`;
 
 function openIntro() {
   openPanel(`<h2>Дедушкин огород</h2>
     <p>Дедушка Матвей оставил внуку Тёме старый дом и заросший огород на краю деревни. В кармане 100 монет и пара пакетиков семян.</p>
-    <p>План простой: вырастить урожай, продать его тёте Гале на рынке и накопить ${GOAL} монет на ремонт дома.</p>
+    <p>План простой: вырастить урожай, продать его и накопить ${GOAL} монет на ремонт дома.</p>
     ${HOW}
     <div class="btns"><button class="btn" data-close data-focus>Начать</button></div>`, null, true);
   state.intro = true; save();
@@ -486,10 +574,11 @@ function openMorning(note, ripened, dry, ex = {}) {
     ${ex.changed && now.length ? `<p>В этом сезоне сажают: ${now.join(', ')}.</p>` : ''}
     ${ex.snowed && s.id === 'winter' ? '<p>За ночь всё засыпало снегом.</p>' : ''}
     ${weather}
+    ${ex.shipped ? `<p>За отгрузку из ящика получено ${ex.shipped} монет.</p>` : ''}
     ${note ? `<p>${note}</p>` : ''}
     <p>${list ? 'За ночь созрело: ' + list + '.' : 'Пока ничего не созрело. Растения тянутся к солнцу.'}</p>
     ${dry ? `<p>Без полива осталось растений: ${dry}. Они росли вдвое медленнее.</p>` : ''}
-    <p class="say">Тётя Галя кричит с рынка: «Сегодня хорошо берут: ${CROPS[best].product.toLowerCase()}, по ${price(best)} монет!»</p>
+    <p>Сегодня дороже всего принимают: ${CROPS[best].product.toLowerCase()}, по ${price(best)} монет.</p>
     <div class="btns"><button class="btn" data-close data-focus>Доброе утро!</button></div>`);
 }
 function openWin() {
@@ -500,74 +589,87 @@ function openWin() {
 }
 function plural(n, a, b, c) { const m = n % 100, d = n % 10; if (m > 10 && m < 20) return c; if (d === 1) return a; if (d > 1 && d < 5) return b; return c; }
 
-let shopTab = 'sell';
-function openShop(tab) {
-  shopTab = tab || shopTab;
-  const greet = GREET[Math.floor(hash(state.day, 3, 5) * GREET.length)];
-  const tabs = `<div class="tabs" role="tablist">
-      <button class="tab" role="tab" data-tab="sell" aria-selected="${shopTab === 'sell'}">Продать</button>
-      <button class="tab" role="tab" data-tab="buy" aria-selected="${shopTab === 'buy'}">Купить</button></div>`;
-  let body = '';
-  if (shopTab === 'sell') {
-    let total = 0;
-    KEYS.forEach(k => {
-      const n = state.produce[k]; if (!n) return;
-      const p = price(k), f = factor(k); total += n * p;
-      const trend = f > 1.08 ? '<span class="up">▲ сегодня дорого</span>' : f < 0.92 ? '<span class="down">▼ сегодня дёшево</span>' : 'обычная цена';
-      body += `<div class="row"><span data-icon="prod:${k}"></span><div><div class="nm">${CROPS[k].product} ×${n}</div><div class="sub">${p} мон. за шт. · ${trend}</div></div>
-        <div class="acts"><button class="btn alt sm" data-sell="${k}:1">Продать 1</button><button class="btn sm" data-sell="${k}:all">Все за ${n * p}</button></div></div>`;
-    });
-    body = body
-      ? body + `<div class="btns"><button class="btn" data-sell="all:all" data-focus>Продать всё за ${total}</button><button class="btn alt" data-close>Уйти</button></div>`
-      : `<p>Корзина пуста. Соберите урожай и приходите.</p><div class="btns"><button class="btn" data-tab="buy" data-focus>Купить семена</button><button class="btn alt" data-close>Уйти</button></div>`;
-  } else {
-    body += '<h3>Семена и саженцы</h3>';
-    KEYS.forEach(k => {
-      const d = CROPS[k];
-      const now = canPlant(k, season().id);
-      const info = `${d.seed} мон. · ${seasonNames(d.plant || d.seasons)}${now ? '' : ' (сейчас не сезон)'} · растёт ${d.grow} ${plural(d.grow, 'день', 'дня', 'дней')}` + (d.regrow ? `, потом урожай каждые ${d.regrow} дн.` : '') + (d.fruit ? ', плоды осенью' : '') + ` · у вас ${state.seeds[k]}`;
-      body += `<div class="row"><span data-icon="seed:${k}"></span><div><div class="nm">${d.seedName}</div><div class="sub">${info}</div></div>
-        <div class="acts"><button class="btn alt sm" data-buy="${k}:1" ${state.money < d.seed ? 'disabled' : ''}>+1</button><button class="btn sm" data-buy="${k}:5" ${state.money < d.seed * 5 ? 'disabled' : ''}>+5 за ${d.seed * 5}</button></div></div>`;
-    });
-    body += '<h3>Улучшения</h3>';
-    UPGRADES.forEach(u => {
-      const done = (u.id === 'can' && state.cap > 10) || (u.id === 'field2' && state.zones >= 2) || (u.id === 'field3' && state.zones >= 3) || (u.id === 'house' && state.house);
-      const locked = u.id === 'field3' && state.zones < 2;
-      const icon = u.id === 'can' ? 'can' : u.id === 'house' ? 'house' : 'field';
-      body += `<div class="row"><span data-icon="${icon}"></span><div><div class="nm">${u.name}</div><div class="sub">${u.sub}</div></div>
-        <div class="acts"><button class="btn sm" data-up="${u.id}" ${done || locked || state.money < u.cost ? 'disabled' : ''}>${done ? 'Куплено' : u.cost + ' мон.'}</button></div></div>`;
-    });
-    body += `<div class="btns"><button class="btn alt" data-close>Уйти</button></div>`;
-  }
-  openPanel(`<h2>Рынок тёти Гали</h2><p class="say">«${greet}»</p>
-    <div class="money">Монеты: <b>${state.money}</b></div>${tabs}${body}`, shopClick);
-}
-function shopClick(b) {
-  const ds = b.dataset;
-  if (ds.tab) return openShop(ds.tab);
-  if (ds.sell) {
-    const [k, q] = ds.sell.split(':');
-    let got = 0;
+const trendOf = k => { const f = factor(k); return f > 1.08 ? '<span class="up">▲ сегодня дорого</span>' : f < 0.92 ? '<span class="down">▼ сегодня дёшево</span>' : 'обычная цена'; };
+/* shipping bin: put produce in, the money comes next morning */
+function openShip() {
+  let body = '', inBin = 0, total = 0;
+  KEYS.forEach(k => {
+    const n = state.produce[k], m = state.shipped[k] || 0;
+    inBin += m * price(k);
+    if (!n) return;
+    total += n * price(k);
+    body += `<div class="row"><span data-icon="prod:${k}"></span><div><div class="nm">${CROPS[k].product} ×${n}</div><div class="sub">${price(k)} мон. за шт. · ${trendOf(k)}</div></div>
+      <div class="acts"><button class="btn alt sm" data-ship="${k}:1">Положить 1</button><button class="btn sm" data-ship="${k}:all">Все за ${n * price(k)}</button></div></div>`;
+  });
+  const binList = KEYS.filter(k => state.shipped[k]).map(k => CROPS[k].product + ' ×' + state.shipped[k]).join(', ');
+  openPanel(`<h2>Ящик для отгрузки</h2>
+    <p>Положите урожай в ящик. Утром его заберут, а деньги появятся у вас.</p>
+    ${binList ? `<p>Уже в ящике: ${binList}. Утром получите ${inBin} мон.</p>` : ''}
+    ${body || '<p>В сумке нет урожая. Соберите его на огороде.</p>'}
+    <div class="btns">${body ? `<button class="btn" data-ship="all:all" data-focus>Положить всё за ${total}</button>` : ''}<button class="btn alt" data-close>Закрыть</button></div>`, b => {
+    if (!b.dataset.ship) return;
+    const [k, q] = b.dataset.ship.split(':');
+    let put = 0;
     (k === 'all' ? KEYS : [k]).forEach(key => {
       const n = q === 'all' ? state.produce[key] : Math.min(1, state.produce[key]);
-      if (n > 0) { got += n * price(key); state.produce[key] -= n; }
+      if (n > 0) { state.produce[key] -= n; state.shipped[key] = (state.shipped[key] || 0) + n; put += n; }
     });
-    if (got) { state.money += got; SFX.coin(); toast('+' + got + ' монет'); }
-  }
-  if (ds.buy) {
-    const [k, q] = ds.buy.split(':'), n = +q, cost = CROPS[k].seed * n;
-    if (state.money >= cost) { state.money -= cost; state.seeds[k] += n; SFX.coin(); }
-  }
-  if (ds.up) {
-    const u = UPGRADES.find(x => x.id === ds.up);
-    if (u && state.money >= u.cost && !(u.id === 'field3' && state.zones < 2)) {
-      state.money -= u.cost; SFX.coin();
-      if (u.id === 'can') { state.cap = 30; state.water = 30; }
-      if (u.id === 'field2' || u.id === 'field3') { state.zones = u.id === 'field2' ? 2 : 3; buildMap(); buildObjects(); bgDirty = true; }
-      if (u.id === 'house') { state.house = true; bgDirty = true; save(); return openWin(); }
+    if (put) SFX.plant();
+    save(); openShip();
+  });
+}
+/* mailbox: order seeds and upgrades from the catalogue */
+function openCatalog() {
+  let body = '<h3>Семена и саженцы</h3>';
+  KEYS.forEach(k => {
+    const d = CROPS[k], now = canPlant(k, season().id);
+    const info = `${d.seed} мон. · ${seasonNames(d.plant || d.seasons)}${now ? '' : ' (сейчас не сезон)'} · растёт ${d.grow} ${plural(d.grow, 'день', 'дня', 'дней')}` + (d.regrow ? `, потом урожай каждые ${d.regrow} дн.` : '') + (d.fruit ? ', плоды осенью' : '') + ` · у вас ${state.seeds[k]}`;
+    body += `<div class="row"><span data-icon="seed:${k}"></span><div><div class="nm">${d.seedName}</div><div class="sub">${info}</div></div>
+      <div class="acts"><button class="btn alt sm" data-buy="${k}:1" ${state.money < d.seed ? 'disabled' : ''}>+1</button><button class="btn sm" data-buy="${k}:5" ${state.money < d.seed * 5 ? 'disabled' : ''}>+5 за ${d.seed * 5}</button></div></div>`;
+  });
+  body += '<h3>Улучшения</h3>';
+  UPGRADES.forEach(u => {
+    const done = (u.id === 'can' && state.cap > 10) || (u.id === 'house' && state.house);
+    body += `<div class="row"><span data-icon="${u.id}"></span><div><div class="nm">${u.name}</div><div class="sub">${u.sub}</div></div>
+      <div class="acts"><button class="btn sm" data-up="${u.id}" ${done || state.money < u.cost ? 'disabled' : ''}>${done ? 'Куплено' : u.cost + ' мон.'}</button></div></div>`;
+  });
+  openPanel(`<h2>Каталог семян почтой</h2>
+    <p>Пока в деревне нет лавки, всё нужное можно заказать по почте. Заказ сразу оказывается в сумке.</p>
+    <div class="money">Монеты: <b>${state.money}</b></div>${body}
+    <div class="btns"><button class="btn alt" data-close data-focus>Закрыть</button></div>`, b => {
+    const ds = b.dataset;
+    if (ds.buy) {
+      const [k, q] = ds.buy.split(':'), n = +q, cost = CROPS[k].seed * n;
+      if (state.money >= cost) { state.money -= cost; state.seeds[k] += n; SFX.coin(); }
     }
-  }
-  save(); openShop();
+    if (ds.up) {
+      const u = UPGRADES.find(x => x.id === ds.up);
+      if (u && state.money >= u.cost) {
+        state.money -= u.cost; SFX.coin();
+        if (u.id === 'can') { state.cap = 30; state.water = 30; }
+        if (u.id === 'house') { state.house = true; clearCache(); save(); return openWin(); }
+      }
+    }
+    save(); openCatalog();
+  });
+}
+/* the bag: everything Тёма carries. Tap a tool or seeds to take them in hand */
+function openInventory() {
+  const cell = (i, icon, name, n, extra = '') => `<button class="cell${state.tool === i ? ' on' : ''}" ${i >= 0 ? `data-take="${i}"` : 'disabled'} type="button">
+      <span data-icon="${icon}"></span><span class="cn">${name}</span>${n !== '' ? `<span class="cc">${n}</span>` : ''}${extra}</button>`;
+  const tools = cell(0, 'hoe', 'Мотыга', '') + cell(1, 'can', 'Лейка', state.water + '/' + state.cap);
+  const seeds = KEYS.map((k, j) => state.seeds[k] ? cell(j + 2, 'seed:' + k, CROPS[k].name, state.seeds[k], canPlant(k, season().id) ? '' : '<span class="cs">не сезон</span>') : '').join('');
+  const prod = KEYS.map(k => state.produce[k] ? cell(-1, 'prod:' + k, CROPS[k].product, state.produce[k]) : '').join('');
+  openPanel(`<h2>Сумка</h2>
+    <div class="money">Монеты: <b>${state.money}</b></div>
+    <h3>Инструменты</h3><div class="inv">${tools}</div>
+    <h3>Семена</h3>${seeds ? `<div class="inv">${seeds}</div>` : '<p class="small">Семян нет. Закажите их в почтовом ящике у дома.</p>'}
+    <h3>Урожай</h3>${prod ? `<div class="inv">${prod}</div>` : '<p class="small">Урожая пока нет.</p>'}
+    <p class="small">Нажмите на инструмент или семена, чтобы взять их в руки. Урожай продают через ящик для отгрузки у дома.</p>
+    <div class="btns"><button class="btn alt" data-close data-focus>Закрыть (I)</button></div>`, b => {
+    if (b.dataset.take) { state.tool = +b.dataset.take; hud(); closePanel(); }
+  });
+  panel.dataset.kind = 'bag';
 }
 
 /* ---------- sound ---------- */
@@ -602,9 +704,10 @@ function toast(msg) {
 }
 function clockText() { const m = Math.floor(state.min / 10) * 10; return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'); }
 const setText = (el, v) => { if (el.textContent !== v) el.textContent = v; };
-const els = {day:$('#day'), clock:$('#clock'), part:$('#part'), money:$('#money'), water:$('#water'), basket:$('#basket'), goalTxt:$('#goalTxt'), goalBar:$('#goalBar'), holding:$('#holding')};
+const els = {locName:$('#locName'), day:$('#day'), clock:$('#clock'), part:$('#part'), money:$('#money'), water:$('#water'), basket:$('#basket'), goalTxt:$('#goalTxt'), goalBar:$('#goalBar'), holding:$('#holding')};
 let beltSig = '';
 function hud() {
+  setText(els.locName, loc().name);
   { const s = season(); setText(els.day, s.name + ', день ' + s.d + ' из ' + SEASON_DAYS); }
   setText(els.clock, clockText());
   setText(els.part, state.min < 720 ? 'утро' : state.min < 1080 ? 'день' : state.min < 1320 ? 'вечер' : 'ночь');
@@ -669,11 +772,11 @@ function render(now) {
   const x1 = Math.min(W - 1, Math.floor((cam.x + viewW) / T)), y1 = Math.min(H - 1, Math.floor((cam.y + viewH) / T)), sec = now / 1000;
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     const ch = map[y][x], X = x * T, Y = y * T;
-    const trod = state.snowCover && state.snowTrod[x + ',' + y];
+    const trod = state.snowCover && state.snowTrod[trodKey(x, y)];
     if (trod && bgBare) { ctx.drawImage(bgBare, X, Y, T, T, X, Y, T, T); drawTrodden(ctx, x, y); }
     if (ch === '~') drawWater(ctx, x, y, sec, inMap(x, y - 1) && map[y - 1][x] !== '~', look.ice);
-    else if (ch === 'f') {
-      const pl = state.plots[x + ',' + y];
+    else {
+      const pl = plotAt(x, y);
       if (pl && pl.t && (!state.snowCover || trod)) drawSoil(ctx, X, Y, pl.w);
     }
   }
@@ -688,10 +791,9 @@ function render(now) {
   /* everything standing on the ground this frame */
   const list = [];
   const inView = (px, py) => px > cam.x - 96 && px < cam.x + viewW + 48 && py > cam.y - 8 && py < cam.y + viewH + 64;
-  objects.forEach(o => { if (inView(o.px, o.py)) list.push({o:sprite(o.kind, o.kind === 'house' ? state.house : o.a, o.b, look), px:o.px, py:o.py}); });
+  objects.forEach(o => { if (inView(o.px, o.py) && !(o.kind === 'flower' && plotAt(o.tx, o.ty))) list.push({o:sprite(o.kind, o.kind === 'house' ? state.house : o.a, o.b, look), px:o.px, py:o.py}); });
   for (let y = y0; y <= Math.min(H - 1, y1 + 2); y++) for (let x = x0; x <= x1; x++) {
-    if (map[y][x] !== 'f') continue;
-    const pl = state.plots[x + ',' + y];
+    const pl = plotAt(x, y);
     if (pl && pl.c) list.push({o:pl.c.dead ? sprite('dead', 0, 0, look) : sprite('crop', pl.c.k, cropStage(pl.c), look), px:x * T + T / 2, py:y * T + T});
   }
   const frame = p.moving ? Math.floor(p.walk * 8) % 2 : 0;
@@ -711,6 +813,7 @@ function render(now) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if (weatherFor(state.day) === 'snow') drawSnowfall(now);
   applyLight(ctx, cv.width, cv.height, state.min);
+  if (fade.a > 0) { ctx.fillStyle = `rgba(5,8,24,${Math.min(1, fade.a)})`; ctx.fillRect(0, 0, cv.width, cv.height); }
 }
 /* falling snow, in screen space: one flake is one art pixel × 2 */
 let flakes = [];
@@ -733,9 +836,10 @@ const SLOT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', '
 const KEYDIR = {ArrowUp:'up', KeyW:'up', ArrowDown:'down', KeyS:'down', ArrowLeft:'left', KeyA:'left', ArrowRight:'right', KeyD:'right'};
 function frontAct() { if (panelOpen || player.moving) return; const [x, y] = front(); act(x, y); }
 window.addEventListener('keydown', e => {
-  if (panelOpen) { if (e.code === 'Escape' && panelClosable) closePanel(); return; }
+  if (panelOpen) { if ((e.code === 'Escape' || (e.code === 'KeyI' && panel.dataset.kind === 'bag')) && panelClosable) closePanel(); return; }
   const d = KEYDIR[e.code];
   if (d) { e.preventDefault(); ensureAudio(); if (!held.includes(d)) held.push(d); return; }
+  if (e.code === 'KeyI') { e.preventDefault(); openInventory(); return; }
   if (e.code === 'Space' || e.code === 'KeyE') { e.preventDefault(); if (!e.repeat) frontAct(); return; }
   const slot = SLOT_KEYS.indexOf(e.code.replace('Numpad', 'Digit'));
   if (slot >= 0 && slot < TOOLS.length) { state.tool = slot; hud(); }
@@ -771,7 +875,8 @@ cv.addEventListener('pointerdown', e => {
   const ty = Math.floor(((e.clientY - r.top) / r.height * cv.height + cam.oy) / S / T);
   if (!inMap(tx, ty)) return;
   const p = player, sx = p.moving ? p.tx : p.x, sy = p.moving ? p.ty : p.y, ch = map[ty][tx];
-  if (INTERACT.includes(ch)) {
+  const tl = TOOLS[state.tool].id;
+  if (INTERACT.includes(ch) || plotAt(tx, ty) || (farmable(tx, ty) && tl !== 'can')) {
     const path = bfs(sx, sy, (x, y) => Math.abs(x - tx) + Math.abs(y - ty) === 1);
     if (!path) return toast('Туда не подойти.');
     held.length = 0; p.path = path; p.pending = {x:tx, y:ty};
@@ -789,6 +894,7 @@ document.querySelectorAll('.pad [data-dir]').forEach(b => {
 });
 $('#actBtn').addEventListener('pointerdown', e => { e.preventDefault(); ensureAudio(); frontAct(); });
 $('#helpBtn').addEventListener('click', () => { ensureAudio(); openHelp(); });
+$('#bagBtn').addEventListener('click', () => { ensureAudio(); openInventory(); });
 const soundBtn = $('#soundBtn');
 try { soundOn = localStorage.getItem(SAVE_KEY + '-sound') !== 'off'; } catch (e) {}
 const syncSound = () => { soundBtn.textContent = 'Звук: ' + (soundOn ? 'вкл' : 'выкл'); };

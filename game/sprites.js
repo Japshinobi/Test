@@ -179,6 +179,28 @@ function drawWell(g) {
   P(3, 23, 3, 1, C.stoneD); P(9, 25, 3, 1, C.stoneD); P(6, 22, 2, 1, C.stoneD); P(12, 22, 2, 1, C.stoneD); P(1, 27, 14, 1, C.stoneD);
   P(6, 13, 4, 4, '#8b8b8b'); P(6, 13, 4, 1, '#b0b0b0');
 }
+/* shipping bin: produce put in it is paid for the next morning */
+function drawBin(g) {
+  const P = painter(g, 0, 0);
+  P(1, 6, 14, 10, '#8a5a33'); P(1, 6, 1, 10, '#a97c50'); P(14, 6, 1, 10, '#5e3b1f');
+  P(1, 10, 14, 1, '#5e3b1f'); P(1, 15, 14, 1, '#4b2e17');
+  P(0, 3, 16, 4, '#a97c50'); P(0, 3, 16, 1, '#c99a66'); P(0, 6, 16, 1, '#6e4b2c');
+  P(3, 3, 2, 13, '#6f6f66'); P(11, 3, 2, 13, '#6f6f66'); P(7, 7, 2, 2, '#ffd24a');
+}
+/* mailbox: the seed catalogue arrives by post */
+function drawMailbox(g) {
+  const P = painter(g, 0, 0);
+  P(5, 9, 2, 13, C.trunk); P(5, 9, 1, 13, C.trunkD); P(3, 20, 6, 2, C.trunk);
+  P(1, 2, 10, 7, '#3d6fd6'); P(2, 1, 8, 1, '#3d6fd6'); P(1, 2, 10, 1, '#6f98f0'); P(1, 8, 10, 1, '#284a9a');
+  P(3, 5, 6, 1, '#1c2f6a'); P(10, 1, 1, 6, '#f0bf45'); P(11, 1, 2, 2, '#e0402c');
+}
+/* wooden sign on two posts */
+function drawSign(g) {
+  const P = painter(g, 0, 0);
+  P(3, 9, 2, 9, C.trunk); P(11, 9, 2, 9, C.trunk);
+  P(1, 2, 14, 8, '#a97c50'); P(1, 2, 14, 1, '#c99a66'); P(1, 9, 14, 1, '#6e4b2c'); P(14, 2, 1, 8, '#6e4b2c');
+  P(3, 4, 10, 1, '#5e3b1f'); P(3, 6, 7, 1, '#5e3b1f');
+}
 function drawHouse(g, repaired, tx = 2, ty = 1) {
   const P = painter(g, tx * T, ty * T);
   const roof = repaired ? '#a8432f' : '#7a5a4a', roofD = repaired ? '#7e2f20' : '#5b4236';
@@ -508,6 +530,9 @@ function sprite(kind, a, b, look = SUMMER) {
       P(46, 0, 7, 16, '#7d7d74'); P(46, 0, 7, 2, '#9d9d92'); P(51, 2, 2, 14, '#626259');
       drawHouse(g, a, 0, 12 / T); sn(g);
     });
+    case 'bin':     return cached('bin' + (look.snow ? 's' : ''), 16, 16, 8, 16, g => { drawBin(g); sn(g); });
+    case 'mailbox': return cached('mailbox' + (look.snow ? 's' : ''), 12, 22, 6, 22, g => { drawMailbox(g); sn(g); });
+    case 'sign':    return cached('sign' + (look.snow ? 's' : ''), 16, 18, 8, 18, g => { drawSign(g); sn(g); });
     case 'market': return cached('market' + lk, 80, 48, 0, 48, g => { drawMarket(g, 0, 0); sn(g); });
     case 'player': return cached('player' + a + b, 16, 24, 8, 24, g => drawPlayer(g, 0, 0, a, b));
     case 'crop':

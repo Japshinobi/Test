@@ -176,7 +176,7 @@ const SECTIONS = [
   {id:'characters', title:'Персонажи', desc:'Герой и жители деревни. Пока их двое: Тёма и тётя Галя.', items:[
     {id:'tema', name:'Тёма', meta:'16 × 24 (будет 32 × 48) · 4 направления × 2 кадра ходьбы', wide:true, figs:() =>
       ['down', 'left', 'right', 'up'].flatMap(f => [0, 1].map(fr => fig(obj('player', f, fr), {down:'вниз', left:'влево', right:'вправо', up:'вверх'}[f] + ' ' + (fr + 1))))},
-    {id:'galya', name:'Тётя Галя', meta:'12 × 18 · пока нарисована как часть рынка', figs:() => {
+    {id:'galya', name:'Тётя Галя', meta:'12 × 18 · пока убрана из игры вместе с рынком', figs:() => {
       const full = sprite(80, 48, g => S.drawMarket(g, 0, 0));
       return [fig(sprite(14, 18, g => g.drawImage(full, 33, 14, 14, 18, 0, 0, 14, 18)), 'за прилавком')];
     }}
@@ -193,10 +193,11 @@ const SECTIONS = [
   ]},
   {id:'objects', title:'Постройки и объекты', desc:'Всё, что стоит на карте и мешает пройти: дом, рынок, колодец, деревья, кусты, забор.', items:[
     {id:'house', name:'Дедушкин дом', meta:'64 × 60, стоит на 4 × 3 клетках · до и после ремонта', wide:true, figs:() => [fig(obj('house', false), 'старый'), fig(obj('house', true), 'после ремонта')]},
-    {id:'market', name:'Рынок тёти Гали', meta:'80 × 48', wide:true, figs:() => [fig(obj('market'), '')]},
+    {id:'market', name:'Рынок тёти Гали', meta:'80 × 48 · пока убран из игры, вернётся вместе с продавцом', wide:true, figs:() => [fig(obj('market'), '')]},
     {id:'well', name:'Колодец', meta:'16 × 28, навес выше клетки', figs:() => [fig(obj('well'), '')]},
     {id:'tree', name:'Деревья и куст', meta:'32 × 40, крона шире и выше клетки · куст 20 × 16', wide:true, figs:() => [fig(obj('tree', 0), 'раскидистое'), fig(obj('tree', 1), 'высокое'), fig(obj('bush'), 'куст')]},
-    {id:'fence', name:'Забор', meta:'16 × 16 · соединяется с соседними секциями', wide:true, figs:() => {
+    {id:'yard', name:'Двор', meta:'ящик для отгрузки 16 × 16 · почтовый ящик 12 × 22 · табличка 16 × 18', figs:() => [fig(obj('bin'), 'отгрузка'), fig(obj('mailbox'), 'почта'), fig(obj('sign'), 'табличка')]},
+    {id:'fence', name:'Забор', meta:'16 × 16 · соединяется с соседними секциями · пока не используется', wide:true, figs:() => {
       const piece = (w, h, isF) => sprite(w * 16, h * 16, g => { for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) isF(x, y) ? S.drawFence(g, x, y, (a, b) => a >= 0 && b >= 0 && a < w && b < h && isF(a, b)) : S.drawGrass(g, x, y); });
       return [fig(piece(1, 1, () => true), 'столбик'), fig(piece(3, 1, () => true), 'пролёт'), fig(piece(3, 3, (x, y) => x === 0 || y === 0), 'угол')];
     }}
