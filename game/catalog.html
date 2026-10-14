@@ -196,6 +196,10 @@ const SECTIONS = [
     {id:'house', name:'Дедушкин дом', meta:'64 × 60, стоит на 4 × 3 клетках · до и после ремонта', wide:true, figs:() => [fig(obj('house', false), 'старый'), fig(obj('house', true), 'после ремонта')]},
     {id:'market', name:'Рынок тёти Гали', meta:'80 × 48 · пока убран из игры, вернётся вместе с продавцом', wide:true, figs:() => [fig(obj('market'), '')]},
     {id:'debris', name:'Камни, ветки и пни', meta:'камень 16 × 12 (кирка, 2 удара) · ветки 16 × 8 (топор, 1 удар) · пень 16 × 10 (топор, 2 удара)', wide:true, figs:() => [fig(obj('rock'), 'камень'), fig(obj('twigs'), 'ветки'), fig(obj('stump'), 'пень')]},
+    {id:'bigtree', name:'Старый дуб', meta:'48 × 64 · перегораживает дорогу справа от огорода', figs:() => [fig(obj('bigtree'), '')]},
+    {id:'crossroads', name:'Перекрёсток', meta:'шлагбаумы 32 × 18 и 14 × 36 · указатель 18 × 26 · пугало 16 × 28 · подсолнух 14 × 26 · стог 24 × 18', wide:true, figs:() => [
+      fig(obj('barrier', 'h'), 'шлагбаум'), fig(obj('barrier', 'v'), 'шлагбаум'), fig(obj('signpost'), 'указатель'), fig(obj('scarecrow'), 'пугало'),
+      fig(obj('sunflower', 0), 'подсолнух'), fig(obj('sunflower', 1), 'цветёт'), fig(obj('sunflower', 2), 'осенью'), fig(obj('haystack'), 'стог')]},
     {id:'well', name:'Колодец', meta:'16 × 28, навес выше клетки', figs:() => [fig(obj('well'), '')]},
     {id:'tree', name:'Деревья и куст', meta:'32 × 40, крона шире и выше клетки · куст 20 × 16', wide:true, figs:() => [fig(obj('tree', 0), 'раскидистое'), fig(obj('tree', 1), 'высокое'), fig(obj('bush'), 'куст')]},
     {id:'yard', name:'Двор и стройплощадки', wide:true, meta:'ящик для отгрузки 16 × 16 · почтовый ящик 12 × 22 · табличка 16 × 18 · колышек 8 × 14 · площадка под постройку', figs:() => [fig(obj('bin'), 'отгрузка'), fig(obj('mailbox'), 'почта'), fig(obj('sign'), 'табличка'), fig(obj('stake'), 'колышек'), fig(sprite(32, 16, g => { S.drawSite(g, 0, 0); S.drawSite(g, 1, 0); }), 'стройплощадка')]},
@@ -218,6 +222,8 @@ const SECTIONS = [
     {id:'season-bush', name:'Кусты и цветы', meta:'весной цветут, летом ягоды, осенью вянут, зимой голые', wide:true, figs:() => LOOKS.map(([L, n]) => fig(sprite(32, 16, g => { for (let x = 0; x < 2; x++) L.snow ? S.drawSnow(g, x, 0) : S.drawGrass(g, x, 0, L.grass); g.drawImage(S.sprite('bush', 0, 0, L).img, 0, 0); if (L.flowers !== 'none' && !L.snow) g.drawImage(S.sprite('flower', 3, 1, L).img, 16, 0); }), n))},
     {id:'season-ground', name:'Земля по сезонам', meta:'трава, опавшие листья, снег, протоптанный снег, лёд', wide:true, figs:() => [
       ...LOOKS.slice(0, 5).map(([L, n]) => fig(sprite(16, 16, g => { S.drawGrass(g, 0, 0, L.grass); if (L.fallen) S.drawFallen(g, 0, 0, L.fallen); }), n)),
+      ...LOOKS.slice(0, 5).map(([L, n]) => fig(sprite(16, 16, g => S.drawField(g, 0, 0, L, 'wheat')), 'поле: ' + n)),
+      fig(sprite(32, 16, g => { S.drawBridge(g, 0, 0, 0); S.drawBridge(g, 1, 0, 1); }), 'мост'),
       fig(sprite(16, 16, g => S.drawSnow(g, 0, 0)), 'снег'), fig(sprite(16, 16, g => { S.drawPath(g, 0, 0); S.drawTrodden(g, 0, 0); }), 'протоптано'), fig(sprite(16, 16, g => S.drawWater(g, 0, 0, 0, true, true)), 'лёд')]},
     {id:'season-snow', name:'Постройки под снегом', meta:'снег ложится на все поверхности, обращённые вверх', wide:true, figs:() => [fig(obj('house', true, undefined, LOOKS[5][0]), 'дом'), fig(obj('well', 0, 0, LOOKS[5][0]), 'колодец'), fig(obj('fence', 3, 0, LOOKS[5][0]), 'забор')]}
   ]},

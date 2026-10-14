@@ -67,6 +67,40 @@ function drawSite(g, x, y) {
   P(0, 0, 16, 16, '#a07a52');
   for (let i = 0; i < 6; i++) P(Math.floor(hash(x, y, i + 210) * 15), Math.floor(hash(x, y, i + 220) * 15), 1, 1, i % 2 ? '#86623e' : '#b8946a');
 }
+/* someone else's fields at the crossroads; they change with the seasons. type: 'wheat' or 'sun' (sunflowers) */
+function drawField(g, x, y, look, type) {
+  const P = painter(g, x * T, y * T), t = (look.d - 1) / 11, h = (i, s) => hash(x, y, i + s);
+  if (look.season === 'winter') {
+    P(0, 0, 16, 16, '#8a7a6a'); for (let r = 2; r < 16; r += 4) P(0, r, 16, 1, '#6e604f');
+    return;
+  }
+  if (look.season === 'spring' || (type === 'sun' && look.season === 'summer' && t < .2)) {
+    P(0, 0, 16, 16, '#7a5236'); for (let r = 2; r < 16; r += 4) P(0, r, 16, 1, '#5e3e26');
+    const n = look.season === 'spring' ? Math.round(t * 8) : 8;
+    for (let i = 0; i < n; i++) P(Math.floor(h(i, 230) * 15), 1 + 4 * Math.floor(h(i, 240) * 4), 1, 2, i % 2 ? '#62d04e' : '#3fb83a');
+    return;
+  }
+  if (look.season === 'autumn') {
+    P(0, 0, 16, 16, type === 'sun' ? '#8a7a4a' : '#c2a35a');
+    for (let i = 0; i < 12; i++) P(Math.floor(h(i, 250) * 15), Math.floor(h(i, 260) * 14), 1, 2, type === 'sun' ? '#5e4a2a' : '#9a7a3a');
+    return;
+  }
+  /* summer */
+  if (type === 'sun') { P(0, 0, 16, 16, '#3f8a2f'); for (let i = 0; i < 6; i++) P(Math.floor(h(i, 270) * 14), Math.floor(h(i, 280) * 14), 3, 2, '#5aa83a'); return; }
+  const ripe = t > .45, stalk = ripe ? '#d9b84a' : '#6fbf3a', head = ripe ? '#f0d878' : '#9ad85a', base = ripe ? '#c9a23a' : '#4f9a2f';
+  P(0, 0, 16, 16, base);
+  for (let c = 0; c < 16; c += 2) {
+    const top = 1 + Math.floor(h(c, 290) * 4);
+    P(c, top + 2, 1, 14 - top, stalk); P(c, top, 1, 3, head);
+  }
+}
+/* wooden bridge planks over the river; side: 0 left half, 1 right half */
+function drawBridge(g, x, y, side) {
+  const P = painter(g, x * T, y * T);
+  P(0, 0, 16, 16, '#a97c50');
+  for (let r = 3; r < 16; r += 4) P(0, r, 16, 1, '#6e4b2c');
+  if (side === 0) { P(0, 0, 2, 16, '#6e4b2c'); P(0, 0, 1, 16, '#c99a66'); } else { P(14, 0, 2, 16, '#6e4b2c'); P(15, 0, 1, 16, '#c99a66'); }
+}
 /* fallen leaves lying on the grass in autumn */
 function drawFallen(g, x, y, amount) {
   const P = painter(g, x * T, y * T), cols = ['#e0a02a', '#d9662a', '#f5d04a', '#a8601a'], n = Math.round(amount * 5);
@@ -223,6 +257,72 @@ function drawStump(g) {
   const P = painter(g, 0, 0);
   P(3, 3, 10, 7, C.trunk); P(3, 3, 2, 7, C.trunkD); P(3, 2, 10, 2, '#c99a66'); P(5, 2, 6, 1, '#a0784f'); P(7, 2, 2, 1, C.trunkD);
   P(1, 8, 3, 2, C.trunk); P(12, 8, 3, 2, C.trunk);
+}
+/* a huge old oak blocking the road for now; 48 × 64 */
+function drawBigTree(g, look) {
+  const P = painter(g, 0, 0);
+  line(P, 23, 40, 8, 18, 3, C.trunk); line(P, 25, 40, 40, 16, 3, C.trunk); line(P, 24, 38, 24, 8, 3, C.trunk);
+  line(P, 12, 24, 4, 20, 1, C.trunk); line(P, 36, 22, 45, 18, 1, C.trunk); line(P, 24, 18, 16, 6, 1, C.trunk); line(P, 25, 18, 33, 6, 1, C.trunk);
+  P(19, 38, 11, 24, C.trunk); P(19, 38, 3, 24, C.trunkD); P(27, 40, 2, 20, '#a97c50'); P(15, 58, 19, 6, C.trunk); P(13, 61, 4, 3, C.trunkD); P(32, 61, 4, 3, C.trunkD);
+  P(22, 46, 4, 5, '#3a2414');
+}
+function drawBigCanopy(g) {
+  const P = painter(g, 0, 0);
+  P(6, 8, 36, 30, C.leaf); P(2, 14, 44, 20, C.leaf); P(12, 3, 24, 6, C.leaf); P(16, 1, 16, 2, C.leaf); P(8, 37, 32, 5, C.leaf);
+  P(2, 30, 44, 3, C.leafD); P(36, 12, 8, 18, C.leafD); P(10, 39, 28, 3, C.leafD);
+  P(12, 5, 12, 4, C.leafL); P(6, 12, 8, 6, C.leafL); P(18, 10, 6, 3, C.leafL); P(4, 20, 4, 5, C.leafL);
+  P(22, 18, 2, 2, C.leafD); P(30, 14, 2, 3, C.leafD); P(14, 24, 3, 2, C.leafD); P(28, 26, 3, 2, C.leafD);
+}
+/* striped barrier: across a vertical road (h, 32 × 18) or a horizontal one (v, 14 × 36) */
+function drawBarrier(g, dir) {
+  const P = painter(g, 0, 0), R = '#d6455a', Wt = '#f2e6bf';
+  if (dir === 'h') {
+    P(1, 4, 3, 14, '#5a5a5a'); P(28, 8, 3, 10, '#5a5a5a');
+    for (let i = 0; i < 6; i++) P(2 + i * 5, 6, 5, 3, i % 2 ? Wt : R);
+    P(2, 9, 29, 1, 'rgba(0,0,0,.25)');
+    return;
+  }
+  P(5, 0, 4, 4, '#5a5a5a'); P(5, 30, 4, 6, '#5a5a5a');
+  for (let i = 0; i < 6; i++) P(5, 3 + i * 5, 3, 5, i % 2 ? Wt : R);
+  P(8, 3, 1, 28, 'rgba(0,0,0,.25)');
+}
+/* signpost with arrows, 18 × 26 */
+function drawSignpost(g) {
+  const P = painter(g, 0, 0), wd = '#a97c50', dk = '#6e4b2c';
+  P(8, 4, 2, 22, C.trunk); P(8, 4, 1, 22, C.trunkD);
+  P(2, 4, 12, 4, wd); P(14, 5, 2, 2, wd); P(2, 7, 12, 1, dk);
+  P(4, 10, 12, 4, wd); P(2, 11, 2, 2, wd); P(4, 13, 12, 1, dk);
+  P(3, 16, 11, 4, wd); P(14, 17, 2, 2, wd); P(3, 19, 11, 1, dk);
+  P(4, 5, 6, 1, '#5e3b1f'); P(7, 11, 6, 1, '#5e3b1f'); P(5, 17, 6, 1, '#5e3b1f'); P(8, 2, 2, 2, C.trunk);
+}
+/* scarecrow, 16 × 28 */
+function drawScarecrow(g) {
+  const P = painter(g, 0, 0);
+  P(7, 8, 2, 20, C.trunk); P(1, 12, 14, 2, C.trunk);
+  P(4, 11, 8, 9, '#5b8fd6'); P(4, 11, 8, 1, '#7fa8e6'); P(2, 12, 3, 3, '#5b8fd6'); P(11, 12, 3, 3, '#5b8fd6'); P(6, 14, 1, 1, '#f0bf45'); P(9, 16, 1, 1, '#f0bf45');
+  P(1, 14, 2, 2, '#e3c069'); P(13, 14, 2, 2, '#e3c069'); P(5, 20, 6, 2, '#e3c069');
+  P(5, 3, 6, 6, '#e8d6a8'); P(6, 5, 1, 1, C.ink); P(9, 5, 1, 1, C.ink); P(6, 7, 4, 1, '#8a6a3a');
+  P(3, 2, 10, 2, '#9c6b2f'); P(5, 0, 6, 2, '#9c6b2f');
+}
+/* sunflower in the field. stage: 0 young, 1 bloom, 2 dry (autumn) */
+function drawSunflower(g, stage) {
+  const P = painter(g, 0, 0);
+  if (stage === 2) {
+    P(6, 8, 2, 18, '#8a7a3a'); P(3, 14, 3, 2, '#7a6a3a'); P(8, 17, 3, 2, '#7a6a3a');
+    P(4, 6, 6, 5, '#5e4a2a'); P(5, 10, 4, 1, '#8a6a3a');
+    return;
+  }
+  if (stage === 0) { P(6, 12, 2, 14, '#5aa83a'); P(3, 15, 3, 3, C.leaf); P(8, 13, 3, 3, C.leaf); P(5, 10, 4, 3, '#7ad04a'); return; }
+  P(6, 9, 2, 17, '#4f9a2f'); P(2, 14, 4, 3, C.leaf); P(8, 17, 4, 3, C.leaf); P(2, 14, 2, 1, C.leafL);
+  P(2, 1, 10, 9, '#f5c518'); P(1, 3, 12, 5, '#f5c518'); P(4, 0, 6, 1, '#f5c518'); P(4, 9, 6, 1, '#f5c518');
+  P(4, 3, 6, 5, '#6b3e1a'); P(5, 4, 2, 2, '#8a5a2a'); P(2, 2, 2, 1, '#ffe066');
+}
+/* haystack after the harvest, 24 × 18 */
+function drawHaystack(g) {
+  const P = painter(g, 0, 0);
+  P(2, 8, 20, 10, '#d9b84a'); P(4, 4, 16, 5, '#d9b84a'); P(7, 1, 10, 4, '#e8cc6a'); P(10, 0, 4, 1, '#e8cc6a');
+  P(2, 16, 20, 2, '#a8862a'); P(18, 6, 4, 10, '#b8962a');
+  for (let i = 0; i < 7; i++) P(4 + i * 2.5 | 0, 6 + (i % 3) * 3, 1, 3, '#f0dc8a');
 }
 /* wooden sign on two posts */
 function drawSign(g) {
@@ -593,6 +693,16 @@ function sprite(kind, a, b, look = SUMMER) {
     case 'rock':    return cached('rock' + (look.snow ? 's' : ''), 16, 12, 8, 12, g => { drawRock(g); sn(g); });
     case 'twigs':   return cached('twigs' + (look.snow ? 's' : ''), 16, 8, 8, 8, g => { drawTwigs(g); sn(g); });
     case 'stump':   return cached('stump' + (look.snow ? 's' : ''), 16, 10, 8, 10, g => { drawStump(g); sn(g); });
+    case 'bigtree': return cached('bigtree' + lk, 48, 64, 24, 64, g => {
+      drawBigTree(g, look);
+      const leaves = layer(48, 64, drawBigCanopy); seasonLeaves(leaves, look, 61, .5); g.drawImage(leaves, 0, 0); sn(g);
+    });
+    case 'barrier': return a === 'h' ? cached('barrierh' + (look.snow ? 's' : ''), 32, 18, 16, 18, g => { drawBarrier(g, 'h'); sn(g); })
+                                     : cached('barrierv' + (look.snow ? 's' : ''), 14, 36, 7, 36, g => { drawBarrier(g, 'v'); sn(g); });
+    case 'signpost':  return cached('signpost' + (look.snow ? 's' : ''), 18, 26, 9, 26, g => { drawSignpost(g); sn(g); });
+    case 'scarecrow': return cached('scarecrow' + (look.snow ? 's' : ''), 16, 28, 8, 28, g => { drawScarecrow(g); sn(g); });
+    case 'sunflower': return cached('sunflower' + a, 14, 26, 7, 26, g => drawSunflower(g, a));
+    case 'haystack':  return cached('haystack' + (look.snow ? 's' : ''), 24, 18, 12, 18, g => { drawHaystack(g); sn(g); });
     case 'stake':   return cached('stake' + (look.snow ? 's' : ''), 8, 14, 3, 14, g => { drawStake(g); sn(g); });
     case 'sign':    return cached('sign' + (look.snow ? 's' : ''), 16, 18, 8, 18, g => { drawSign(g); sn(g); });
     case 'market': return cached('market' + lk, 80, 48, 0, 48, g => { drawMarket(g, 0, 0); sn(g); });
@@ -671,6 +781,6 @@ function applyLight(g, w, h, min) {
 }
 
 
-return {T, C, CROPS, SEASONS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, drawSite, clearCache, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, drawProduce, iconCanvas, drawPlayer,
+return {T, C, CROPS, SEASONS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, drawSite, drawField, drawBridge, clearCache, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, drawProduce, iconCanvas, drawPlayer,
   decoKind, fenceMask, sprite, silhouette, sunAt, castShadow, tintAt, applyLight};
 })();
