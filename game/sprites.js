@@ -843,7 +843,11 @@ function sprite(kind, a, b, look = SUMMER) {
     case 'stallside': return cached('stallside' + a + b + (look.snow ? 's' : ''), 48, 64, 0, 64, g => { drawStallSide(g, a, b); sn(g); });
     case 'stallback': return cached('stallback' + (look.snow ? 's' : ''), 64, 40, 0, 40, g => { drawStallBack(g); sn(g); });
     case 'tent':      return cached('tent' + b + (look.snow ? 's' : ''), 64, 64, 0, 64, g => { drawTent(g, b); sn(g); });
-    case 'fountain':  return cached('fountain' + (look.snow ? 's' : ''), 48, 56, 0, 56, g => { drawFountain(g); sn(g); });
+    case 'fountain': {
+      /* the basin stands on the ground, so its shadow starts at the widest line of the oval, not at the front wall */
+      const o = cached('fountain' + (look.snow ? 's' : ''), 48, 56, 0, 56, g => { drawFountain(g); sn(g); });
+      o.fy = FC.cy; o.shadow = fountainShadow; return o;
+    }
     case 'stake':   return cached('stake' + (look.snow ? 's' : ''), 8, 14, 3, 14, g => { drawStake(g); sn(g); });
     case 'sign':    return cached('sign' + (look.snow ? 's' : ''), 16, 18, 8, 18, g => { drawSign(g); sn(g); });
     case 'market': return cached('market' + lk, 80, 48, 0, 48, g => { drawMarket(g, 0, 0); sn(g); });
@@ -892,11 +896,25 @@ function sunAt(min) {
   };
 }
 /* g must already carry the world transform; (px, py) is where the object touches the ground */
+/* a low wide basin: its shadow is the oval itself, pushed away from the sun by the height of the wall,
+   plus a strip from the pedestal and the top bowl */
+function fountainShadow(g, o, px, py, sun) {
+  const X = px - o.ax, Y = py - o.ay, {cx, cy, rx, ry, wall} = FC;
+  g.fillStyle = '#06102a';
+  const dx = sun.shear * wall * 1.6, dy = sun.len * wall * 1.6;
+  for (let y = -ry; y <= ry; y++) { const w = Math.round(rx * Math.sqrt(1 - (y / ry) ** 2)); g.fillRect(Math.round(X + cx - w + dx), Math.round(Y + cy + y + dy), w * 2, 1); }
+  for (let i = 0; i <= 22; i++) {
+    const w = i > 17 ? 9 : 3;
+    g.fillRect(Math.round(X + cx - w + sun.shear * i), Math.round(Y + cy + sun.len * i), w * 2, 1);
+  }
+}
 function castShadow(g, o, px, py, sun) {
+  if (o.shadow) return o.shadow(g, o, px, py, sun);
   const foot = py - o.ay + o.fy;
   g.save();
   g.transform(1, 0, -sun.shear, -sun.len, px - o.ax + sun.shear * o.fy, foot + sun.len * o.fy);
-  g.drawImage(silhouette(o.img), 0, 0);
+  /* only what rises above the ground line casts a shadow */
+  if (o.fy > 0) g.drawImage(silhouette(o.img), 0, 0, o.w, o.fy, 0, 0, o.w, o.fy);
   g.restore();
 }
 /* colour of the light over the day, multiplied over the whole picture */
