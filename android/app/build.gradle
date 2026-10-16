@@ -1,0 +1,60 @@
+// Android-приложение вокруг проекта Godot из папки ../godot.
+// Godot для Android берётся готовой библиотекой из Maven Central, а файлы игры кладутся внутрь APK как assets.
+plugins {
+    id 'com.android.application'
+}
+
+def godotVersion = '4.7.2.stable'
+def gameAssets = layout.buildDirectory.dir('godot-assets')
+
+android {
+    namespace 'com.dedushkin.ogorod'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.dedushkin.ogorod'
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '0.1-ro'
+        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
+    }
+
+    buildTypes {
+        release {
+            // Для теста подписываем отладочным ключом: такой APK можно поставить на телефон вручную.
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main { assets.srcDirs = [gameAssets] }
+    }
+
+    packaging {
+        jniLibs { useLegacyPackaging true }
+    }
+}
+
+dependencies {
+    implementation "org.godotengine:godot:${godotVersion}@aar"
+    implementation 'androidx.fragment:fragment:1.8.6'
+    implementation 'androidx.documentfile:documentfile:1.1.0'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.21'
+}
+
+// Файлы игры: всё из папки godot, кроме служебного.
+tasks.register('copyGodotProject', Sync) {
+    from(rootProject.file('../godot')) {
+        exclude '.godot/**', 'README.md', '.gitignore'
+    }
+    from(rootProject.file('cl')) { rename { '_cl_' } }
+    into gameAssets
+}
+preBuild.dependsOn 'copyGodotProject'
