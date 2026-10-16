@@ -2,7 +2,7 @@ extends Node3D
 ## Проба RO-стиля: огород в 3D, Тёма — спрайт, камера вращается вокруг него, можно играть вдвоём по сети.
 ## Всё создаётся из кода при запуске, поэтому сцена main.tscn почти пустая.
 
-const FarmMap := preload("res://scripts/farm_map.gd")
+const Location := preload("res://scripts/location.gd")
 const Atlas := preload("res://scripts/atlas.gd")
 const World := preload("res://scripts/world.gd")
 const Avatar := preload("res://scripts/avatar.gd")
@@ -18,7 +18,7 @@ const GAME_MIN_PER_SEC := 4.0
 const FAST := 25
 
 var atlas: Atlas
-var map: FarmMap
+var map: Location
 var world: World
 var hud: Hud
 var cam: Camera3D
@@ -50,7 +50,7 @@ var _pinch := 0.0
 
 func _ready() -> void:
 	atlas = Atlas.new()
-	map = FarmMap.new()
+	map = Location.new("farm")
 	world = World.new()
 	add_child(world)
 	world.setup(atlas, map)
@@ -61,7 +61,8 @@ func _ready() -> void:
 	me = Avatar.new()
 	add_child(me)
 	me.setup(atlas, false, "Тёма")
-	me.position = Vector3(14.5, 0, 8.6)
+	var spawn: Variant = map.find("spawn")
+	me.position = Vector3(spawn["x"] + 0.5, 0, spawn["y"] + 0.6) if spawn != null else Vector3(map.W / 2.0, 0, map.H / 2.0)
 	cam_target = me.position
 
 	cam = Camera3D.new()
@@ -108,7 +109,7 @@ func _process(delta: float) -> void:
 # ---------- дни и время ----------
 
 func season_text() -> String:
-	return FarmMap.season_name(day)
+	return Location.season_name(day)
 
 
 func time_speed() -> int:
@@ -344,11 +345,11 @@ func _can_stand(p: Vector3) -> bool:
 
 
 func _make_astar() -> void:
-	astar.region = Rect2i(0, 0, FarmMap.W, FarmMap.H)
+	astar.region = Rect2i(0, 0, map.W, map.H)
 	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
 	astar.update()
-	for y in FarmMap.H:
-		for x in FarmMap.W:
+	for y in map.H:
+		for x in map.W:
 			if not map.walkable(x, y):
 				astar.set_point_solid(Vector2i(x, y), true)
 

@@ -1,0 +1,28 @@
+{
+	"about": "Каталог земли и объектов. Его читают и игра, и редактор карт (editor/map-editor.html). Новый объект, добавленный сюда, сразу появится в редакторе.",
+	"ground": [
+		{"key": ".", "id": "grass", "name": "Трава", "walk": true, "color": "#4caf50"},
+		{"key": ",", "id": "flowers", "name": "Трава с цветами", "walk": true, "color": "#a5d66b"},
+		{"key": "=", "id": "path", "name": "Тропинка", "walk": true, "color": "#e6c88c"},
+		{"key": "~", "id": "water", "name": "Вода", "walk": false, "color": "#2f7fe0"},
+		{"key": "P", "id": "site", "name": "Место под постройку", "walk": true, "color": "#f0902a"},
+		{"key": "#", "id": "void", "name": "Непроходимо", "walk": false, "color": "#111111"}
+	],
+	"objects": [
+		{"id": "tree0", "name": "Дерево", "group": "Природа", "sprite": "tree0", "seasonal": true},
+		{"id": "tree1", "name": "Дерево другое", "group": "Природа", "sprite": "tree1", "seasonal": true},
+		{"id": "bigoak", "name": "Большой дуб", "group": "Природа", "sprite": "bigtree", "seasonal": true, "size": [3, 3]},
+		{"id": "bush", "name": "Куст", "group": "Природа", "sprite": "bush", "seasonal": true},
+		{"id": "rock", "name": "Камень", "group": "Природа", "sprite": "rock", "snow": true},
+		{"id": "twigs", "name": "Ветки", "group": "Природа", "sprite": "twigs", "snow": true, "shadow": false},
+		{"id": "stump", "name": "Пень", "group": "Природа", "sprite": "stump", "snow": true},
+		{"id": "house", "name": "Дом деда", "group": "Постройки", "sprite": "house0", "snow": true, "size": [4, 3], "door": [2, 2], "model": "house"},
+		{"id": "well", "name": "Колодец", "group": "Постройки", "sprite": "well", "snow": true},
+		{"id": "bin", "name": "Ящик для продажи", "group": "Постройки", "sprite": "bin", "snow": true},
+		{"id": "mailbox", "name": "Почтовый ящик", "group": "Постройки", "sprite": "mailbox", "snow": true},
+		{"id": "sign", "name": "Табличка", "group": "Постройки", "sprite": "sign", "snow": true, "props": ["text"]},
+		{"id": "stake", "name": "Колышек", "group": "Постройки", "sprite": "stake", "snow": true, "block": false, "shadow": false},
+		{"id": "exit", "name": "Выход в локацию", "group": "Служебное", "block": false, "color": "#a040e0", "props": ["to"]},
+		{"id": "spawn", "name": "Старт игрока", "group": "Служебное", "block": false, "color": "#ffffff"}
+	]
+}

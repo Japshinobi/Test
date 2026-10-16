@@ -17,3 +17,5 @@
 - `game/sprites.js` — все рисунки игры. Их используют и игра, и арт-библия.
 - `unity/` — перенос игры в Unity (шаг 1: огород). Как открыть — в `unity/README.md`.
 - `godot/` — проба в стиле Ragnarok Online на Godot: огород в 3D, персонажи-спрайты, игра вдвоём по сети. Как открыть — в `godot/README.md`.
+- `editor/map-editor.html` — редактор карт для игры на Godot. Как пользоваться — в `editor/README.md`.
+- `android/` — сборка APK для телефона.

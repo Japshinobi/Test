@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Редактор карт</title>
+<!--
+  Редактор карт «Дедушкина огорода». Открывается двойным щелчком в Chrome или Edge.
+  Читает каталог объектов (godot/data/objects.json), спрайты (godot/assets/atlas.*)
+  и карты (godot/maps/*.json), сохраняет карты обратно в godot/maps.
+-->
+<style>
+:root {
+  --bg: #1d2230; --panel: #262c3d; --panel2: #2f3649; --line: #3d4560;
+  --text: #e9e6dc; --muted: #9aa0b4; --accent: #d9b45a; --accent2: #f0cf7a; --danger: #e06060; --ok: #7ccf7c;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 "Segoe UI", Roboto, Arial, sans-serif; }
+body { display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 15px; margin: 0 10px 0 0; color: var(--accent2); font-weight: 600; }
+header .sep { width: 1px; height: 24px; background: var(--line); margin: 0 4px; }
+button, select, input, textarea { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; }
+button { padding: 5px 11px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: #3a4f86; border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; border-color: var(--line); }
+select, input { padding: 4px 6px; }
+input[type=number] { width: 64px; }
+label.chk { display: inline-flex; gap: 5px; align-items: center; color: var(--muted); cursor: pointer; }
+#status { margin-left: auto; color: var(--muted); }
+#status.dirty { color: var(--accent2); }
+main { display: grid; grid-template-columns: 250px 1fr 260px; min-height: 0; }
+aside { background: var(--panel); overflow-y: auto; padding: 10px; }
+aside.left { border-right: 1px solid var(--line); }
+aside.right { border-left: 1px solid var(--line); }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
+h2:first-child { margin-top: 0; }
+.tools { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.tools button { text-align: left; }
+.tools button.on, .item.on { border-color: var(--accent); background: #3a4462; box-shadow: inset 0 0 0 1px var(--accent); }
+.tools kbd { float: right; color: var(--muted); font-size: 11px; }
+.palette { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 3px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); cursor: pointer; font-size: 12px; text-align: center; line-height: 1.15; }
+.item:hover { border-color: var(--accent); }
+.item canvas { width: 44px; height: 44px; image-rendering: pixelated; }
+#view { position: relative; overflow: hidden; background: #12151e; }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+#hover { position: absolute; left: 10px; bottom: 8px; padding: 3px 8px; background: rgba(0,0,0,.6); border-radius: 4px; pointer-events: none; color: #ddd; font-size: 12px; }
+.props label { display: block; color: var(--muted); font-size: 12px; margin: 8px 0 3px; }
+.props textarea, .props input { width: 100%; }
+.props textarea { min-height: 90px; resize: vertical; padding: 6px; }
+.hint { color: var(--muted); font-size: 12.5px; }
+.hint p { margin: 6px 0; }
+.hint b { color: var(--text); font-weight: 600; }
+#toast { position: fixed; left: 50%; top: 56px; transform: translateX(-50%); padding: 8px 16px; background: #2f3a58; border: 1px solid var(--accent); border-radius: 6px; display: none; z-index: 9; }
+#toast.err { border-color: var(--danger); }
+#welcome { position: fixed; inset: 0; background: rgba(15,18,26,.94); display: flex; align-items: center; justify-content: center; z-index: 8; }
+#welcome .box { max-width: 560px; background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 22px 26px; }
+#welcome h3 { margin: 0 0 10px; color: var(--accent2); }
+#welcome p { color: var(--muted); }
+#welcome button { margin-top: 8px; margin-right: 8px; }
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--accent); border-radius: 8px; }
+dialog label { display: block; margin: 8px 0 3px; color: var(--muted); font-size: 12px; }
+dialog input { width: 100%; }
+.row { display: flex; gap: 6px; align-items: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Редактор карт</h1>
+  <select id="mapSel" title="Карта"></select>
+  <button id="newBtn">Новая карта</button>
+  <button id="saveBtn" class="primary" title="Ctrl+S">Сохранить</button>
+  <span class="sep"></span>
+  <button id="undoBtn" title="Ctrl+Z">↶ Отменить</button>
+  <button id="redoBtn" title="Ctrl+Y">↷ Вернуть</button>
+  <span class="sep"></span>
+  <select id="seasonSel" title="Как выглядит карта">
+    <option value="spring06">Весна</option><option value="summer" selected>Лето</option>
+    <option value="autumn06">Осень</option><option value="winter">Зима</option>
+  </select>
+  <label class="chk"><input type="checkbox" id="gridChk" checked> Сетка (G)</label>
+  <span class="sep"></span>
+  <span class="row">Размер <input type="number" id="wIn" min="8" max="400"> × <input type="number" id="hIn" min="8" max="400"> <button id="sizeBtn">Изменить</button></span>
+  <span id="status"></span>
+</header>
+<main>
+  <aside class="left">
+    <h2>Инструмент</h2>
+    <div class="tools" id="tools">
+      <button data-tool="brush">Кисть <kbd>B</kbd></button>
+      <button data-tool="rect">Прямоугольник <kbd>R</kbd></button>
+      <button data-tool="erase">Ластик <kbd>E</kbd></button>
+      <button data-tool="select">Выбор <kbd>V</kbd></button>
+    </div>
+    <div class="row" style="margin-top:6px"><span class="hint">Толщина кисти</span>
+      <select id="sizeSel"><option>1</option><option>2</option><option>3</option><option>5</option></select></div>
+    <div id="palette"></div>
+  </aside>
+  <div id="view"><canvas id="cv"></canvas><div id="hover"></div></div>
+  <aside class="right">
+    <h2>Выбранное</h2>
+    <div id="props" class="props hint">Выберите объект инструментом «Выбор».</div>
+    <h2>Карта</h2>
+    <div class="props"><label>Название</label><input id="nameIn"></div>
+    <h2>Подсказки</h2>
+    <div class="hint">
+      <p><b>Колесо мыши</b> — приблизить. <b>Правая кнопка</b> или <b>пробел</b> + мышь — двигать карту.</p>
+      <p><b>Кисть</b>: выберите землю или объект слева и рисуйте. Объект ставится так, что курсор — его нижняя середина.</p>
+      <p><b>Прямоугольник</b> заливает землю или засаживает объектами целую область.</p>
+      <p><b>Ластик</b> убирает объекты, земля остаётся.</p>
+      <p><b>Выбор</b>: щелчок — свойства объекта, перетаскивание — переместить, <b>Delete</b> — удалить.</p>
+      <p>Новый объект ставится поверх старых и вытесняет их.</p>
+    </div>
+  </aside>
+</main>
+<div id="toast"></div>
+<div id="welcome">
+  <div class="box">
+    <h3>Редактор карт «Дедушкина огорода»</h3>
+    <p>Чтобы начать, откройте папку <b>godot</b> из репозитория игры. Редактор возьмёт оттуда объекты, картинки и карты и будет сохранять карты обратно в <b>godot/maps</b>.</p>
+    <p id="noFsApi" style="display:none;color:#e0a060">Этот браузер не умеет сохранять прямо в папку. Карта будет скачиваться файлом, его нужно положить в godot/maps вручную. Удобнее открыть редактор в Chrome или Edge.</p>
+    <button id="openBtn" class="primary">Открыть папку godot</button>
+    <input type="file" id="dirInput" webkitdirectory style="display:none">
+  </div>
+</div>
+<dialog id="newDlg">
+  <form method="dialog">
+    <b>Новая карта</b>
+    <label>Название (как увидит игрок)</label><input id="ndName" required value="Новая локация">
+    <label>Имя файла латиницей (станет maps/имя.json)</label><input id="ndId" required pattern="[a-z0-9_]+" value="new_place">
+    <div class="row"><div><label>Ширина</label><input id="ndW" type="number" value="40" min="8" max="400"></div>
+    <div><label>Высота</label><input id="ndH" type="number" value="30" min="8" max="400"></div></div>
+    <div style="margin-top:14px" class="row"><button value="ok" class="primary">Создать</button><button value="cancel" formnovalidate>Отмена</button></div>
+  </form>
+</dialog>
+<script>
+'use strict';
+const T = 16;                          // пикселей рисунка в клетке
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+
+// ---------- состояние ----------
+let project = null;     // {dir, files, catalog, atlas, img, maps:{id: map}}
+let map = null;         // {id, name, width, height, ground:[[...]], objects:[...]}
+let tool = 'brush', brush = {kind: 'ground', key: '.'};
+let zoom = 2, panX = 20, panY = 20, showGrid = true;
+let hover = null, sel = null, dirty = false;
+const undo = [], redo = [];
+
+// ---------- загрузка проекта ----------
+async function readText(get) { return await (await get()).text(); }
+
+async function loadProject(src) {
+  // src.get(path) -> Promise<Blob|Response>; src.list(dir) -> имена файлов; src.save(path, text)
+  const catalog = JSON.parse(await readText(() => src.get('data/objects.json')));
+  const atlas = JSON.parse(await readText(() => src.get('assets/atlas.json')));
+  const blob = await src.get('assets/atlas.png');
+  const img = await createImageBitmap(blob instanceof Response ? await blob.blob() : blob);
+  const sprites = {}; for (const s of atlas.sprites) sprites[s.n] = s;
+  const byId = {}; for (const o of catalog.objects) byId[o.id] = o;
+  const groundBy = {}; for (const g of catalog.ground) groundBy[g.key] = g;
+  project = {src, catalog, byId, groundBy, sprites, img, maps: {}};
+  for (const name of await src.list('maps')) {
+    if (!name.endsWith('.json')) continue;
+    try { const m = parseMap(await readText(() => src.get('maps/' + name))); project.maps[m.id] = m; }
+    catch (e) { toast('Не прочитать maps/' + name + ': ' + e.message, true); }
+  }
+  if (!Object.keys(project.maps).length) project.maps.farm = blankMap('farm', 'Огород', 40, 30);
+  buildPalette();
+  fillMapSelect();
+  openMap(project.maps.farm ? 'farm' : Object.keys(project.maps)[0]);
+  $('welcome').style.display = 'none';
+}
+
+function parseMap(text) {
+  const d = JSON.parse(text);
+  const ground = [];
+  for (let y = 0; y < d.height; y++) ground.push(Array.from((d.ground[y] || '').padEnd(d.width, '.').slice(0, d.width)));
+  return {id: d.id, name: d.name || d.id, width: d.width, height: d.height, ground, objects: d.objects.map(o => ({...o}))};
+}
+
+function blankMap(id, name, w, h) {
+  return {id, name, width: w, height: h, ground: Array.from({length: h}, () => Array(w).fill('.')), objects: []};
+}
+
+// Тот же формат, что у карт игры: строка земли на ряд, объект на строку.
+function mapToText(m) {
+  const objs = [...m.objects].sort((a, b) => a.y - b.y || a.x - b.x);
+  return '{\n\t"name": ' + JSON.stringify(m.name) + ',\n\t"id": ' + JSON.stringify(m.id) +
+    ',\n\t"width": ' + m.width + ',\n\t"height": ' + m.height + ',\n\t"ground": [\n' +
+    m.ground.map(r => '\t\t' + JSON.stringify(r.join(''))).join(',\n') + '\n\t],\n\t"objects": [\n' +
+    objs.map(o => '\t\t{' + Object.entries(o).filter(([k]) => k[0] !== '_').map(([k, v]) => JSON.stringify(k) + ': ' + JSON.stringify(v)).join(', ') + '}').join(',\n') + '\n\t]\n}\n';
+}
+
+// Папка через File System Access (Chrome, Edge): можно и читать, и сохранять.
+function dirSource(root) {
+  const walk = async (path) => {
+    let h = root; const parts = path.split('/');
+    for (const p of parts.slice(0, -1)) h = await h.getDirectoryHandle(p);
+    return [h, parts[parts.length - 1]];
+  };
+  return {
+    canSave: true,
+    get: async (path) => { const [h, n] = await walk(path); return (await h.getFileHandle(n)).getFile(); },
+    list: async (dir) => { const out = []; try { const h = await root.getDirectoryHandle(dir); for await (const [n] of h.entries()) out.push(n); } catch (e) {} return out; },
+    save: async (path, text) => {
+      let h = root; const parts = path.split('/');
+      for (const p of parts.slice(0, -1)) h = await h.getDirectoryHandle(p, {create: true});
+      const w = await (await h.getFileHandle(parts[parts.length - 1], {create: true})).createWritable();
+      await w.write(text); await w.close();
+    },
+  };
+}
+
+// Папка, выбранная обычным полем (любой браузер): только чтение, сохранение — скачиванием файла.
+function filesSource(files) {
+  const by = {};
+  for (const f of files) { const p = f.webkitRelativePath.split('/'); by[p.slice(1).join('/')] = f; }
+  return {
+    canSave: false,
+    get: async (path) => { if (!by[path]) throw new Error('нет файла ' + path); return by[path]; },
+    list: async (dir) => Object.keys(by).filter(k => k.startsWith(dir + '/') && k.split('/').length === 2).map(k => k.split('/')[1]),
+    save: async (path, text) => {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type: 'application/json'}));
+      a.download = path.split('/').pop(); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    },
+  };
+}
+
+// Если редактор открыт через веб-сервер рядом с папкой godot — грузимся сразу.
+function httpSource(base) {
+  return {
+    canSave: false,
+    get: async (path) => { const r = await fetch(base + path); if (!r.ok) throw new Error(path); return r; },
+    list: async (dir) => { try { return await (await fetch(base + dir + '/index.json')).json(); } catch (e) { return ['farm.json']; } },
+    save: async (path, text) => { window.__saved = window.__saved || {}; window.__saved[path] = text; },
+  };
+}
+
+async function pickFolder() {
+  if (window.showDirectoryPicker) {
+    try {
+      let root = await window.showDirectoryPicker({id: 'ogorod', mode: 'readwrite'});
+      try { root = await root.getDirectoryHandle('godot'); } catch (e) {}   // выбрали корень репозитория
+      try { await root.getDirectoryHandle('data'); } catch (e) { return toast('В этой папке нет data/objects.json. Выберите папку godot.', true); }
+      await loadProject(dirSource(root));
+    } catch (e) { if (e.name !== 'AbortError') toast('Не удалось открыть папку: ' + e.message, true); }
+  } else $('dirInput').click();
+}
+$('openBtn').onclick = pickFolder;
+$('dirInput').onchange = async (e) => {
+  const files = [...e.target.files]; if (!files.length) return;
+  try { await loadProject(filesSource(files)); } catch (err) { toast('Не удалось прочитать папку: ' + err.message, true); }
+};
+if (!window.showDirectoryPicker) $('noFsApi').style.display = 'block';
+
+// ---------- палитра ----------
+const SEASON = () => $('seasonSel').value;
+
+function spriteName(def) {
+  if (!def.sprite) return null;
+  return def.seasonal ? def.sprite + '_' + SEASON() : def.sprite;
+}
+
+function groundSprite(key, x, y) {
+  const v = (x * 7 + y * 13) % 4;
+  switch (key) {
+    case '=': return 'path_' + v;
+    case 'P': return 'site_' + v;
+    case '~': return 'water_' + ((x + y) % 4) + '_0';
+    case '#': return null;
+    default: return 'grass_' + SEASON() + '_' + v;
+  }
+}
+
+function flowerSprite(x, y) {
+  const s = SEASON(); if (s === 'winter') return null;
+  return 'flower_' + (s.startsWith('spring') ? 'bloom' : s === 'summer' ? 'some' : 'wither') + '_' + ((x * 5 + y * 3) % 8);
+}
+
+function drawSpriteFit(c, name, color) {
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, c.width, c.height);
+  const s = name && project.sprites[name];
+  if (!s) { g.fillStyle = color || '#555'; g.fillRect(8, 8, c.width - 16, c.height - 16); return; }
+  const k = Math.min(c.width / s.w, c.height / s.h);
+  const w = s.w * k, h = s.h * k;
+  g.drawImage(project.img, s.x, s.y, s.w, s.h, (c.width - w) / 2, (c.height - h) / 2, w, h);
+}
+
+function buildPalette() {
+  const box = $('palette'); box.innerHTML = '';
+  const groups = [['Земля', project.catalog.ground.map(g => ({kind: 'ground', key: g.key, name: g.name, def: g}))]];
+  const byGroup = {};
+  for (const o of project.catalog.objects) (byGroup[o.group || 'Прочее'] ||= []).push({kind: 'object', key: o.id, name: o.name, def: o});
+  for (const g in byGroup) groups.push([g, byGroup[g]]);
+  for (const [title, items] of groups) {
+    const h = document.createElement('h2'); h.textContent = title; box.appendChild(h);
+    const grid = document.createElement('div'); grid.className = 'palette'; box.appendChild(grid);
+    for (const it of items) {
+      const el = document.createElement('div'); el.className = 'item'; el.title = it.name;
+      const c = document.createElement('canvas'); c.width = c.height = 44; el.appendChild(c);
+      const t = document.createElement('span'); t.textContent = it.name; el.appendChild(t);
+      el.dataset.kind = it.kind; el.dataset.key = it.key;
+      el._draw = () => it.kind === 'ground'
+        ? (it.key === ',' ? (drawSpriteFit(c, groundSprite('.', 0, 0)), overlay(c, flowerSprite(1, 1))) : drawSpriteFit(c, groundSprite(it.key, 0, 0), it.def.color))
+        : drawSpriteFit(c, spriteName(it.def), it.def.color);
+      el._draw();
+      el.onclick = () => { brush = {kind: it.kind, key: it.key}; if (tool === 'erase' || tool === 'select') setTool('brush'); markPalette(); };
+      grid.appendChild(el);
+    }
+  }
+  markPalette();
+}
+
+function overlay(c, name) {
+  const s = name && project.sprites[name]; if (!s) return;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  g.drawImage(project.img, s.x, s.y, s.w, s.h, (c.width - s.w * 2) / 2, (c.height - s.h * 2) / 2, s.w * 2, s.h * 2);
+}
+
+function markPalette() {
+  for (const el of document.querySelectorAll('.item')) el.classList.toggle('on', el.dataset.kind === brush.kind && el.dataset.key === brush.key && (tool === 'brush' || tool === 'rect'));
+}
+
+function setTool(t) {
+  tool = t;
+  for (const b of document.querySelectorAll('#tools button')) b.classList.toggle('on', b.dataset.tool === t);
+  markPalette(); draw();
+}
+for (const b of document.querySelectorAll('#tools button')) b.onclick = () => setTool(b.dataset.tool);
+
+// ---------- карты ----------
+function fillMapSelect() {
+  const s = $('mapSel'); s.innerHTML = '';
+  for (const id in project.maps) { const o = document.createElement('option'); o.value = id; o.textContent = project.maps[id].name + ' (' + id + '.json)'; s.appendChild(o); }
+}
+$('mapSel').onchange = (e) => openMap(e.target.value);
+
+function openMap(id) {
+  map = project.maps[id]; $('mapSel').value = id; sel = null; undo.length = redo.length = 0;
+  $('wIn').value = map.width; $('hIn').value = map.height; $('nameIn').value = map.name;
+  fitView(); setDirty(map._dirty || false); showProps(); draw();
+}
+
+$('nameIn').oninput = (e) => { map.name = e.target.value; setDirty(true); fillMapSelect(); $('mapSel').value = map.id; };
+
+$('newBtn').onclick = () => $('newDlg').showModal();
+$('newDlg').onclose = () => {
+  if ($('newDlg').returnValue !== 'ok') return;
+  const id = $('ndId').value.trim().toLowerCase();
+  if (project.maps[id]) return toast('Карта ' + id + '.json уже есть', true);
+  const m = blankMap(id, $('ndName').value.trim() || id, +$('ndW').value || 40, +$('ndH').value || 30);
+  m.objects.push({id: 'spawn', x: Math.floor(m.width / 2), y: Math.floor(m.height / 2)});
+  project.maps[id] = m; m._dirty = true; fillMapSelect(); openMap(id);
+};
+
+$('sizeBtn').onclick = () => {
+  const w = Math.max(8, Math.min(400, +$('wIn').value | 0)), h = Math.max(8, Math.min(400, +$('hIn').value | 0));
+  if (w === map.width && h === map.height) return;
+  const lost = map.objects.filter(o => o.x >= w || o.y >= h).length;
+  if (lost && !confirm('За новой границей окажутся объекты (' + lost + ' шт.), они будут удалены. Продолжить?')) return;
+  pushUndo();
+  map.ground = Array.from({length: h}, (_, y) => Array.from({length: w}, (_, x) => (map.ground[y] && map.ground[y][x]) || '.'));
+  map.objects = map.objects.filter(o => o.x < w && o.y < h);
+  map.width = w; map.height = h; setDirty(true); draw();
+};
+
+async function save() {
+  if (!map) return;
+  if (!map.objects.some(o => o.id === 'spawn')) toast('Внимание: на карте нет «Старта игрока».', true);
+  try {
+    await project.src.save('maps/' + map.id + '.json', mapToText(map));
+    setDirty(false);
+    toast(project.src.canSave ? 'Сохранено: godot/maps/' + map.id + '.json' : 'Файл ' + map.id + '.json скачан — положите его в godot/maps');
+  } catch (e) { toast('Не удалось сохранить: ' + e.message, true); }
+}
+$('saveBtn').onclick = save;
+
+function setDirty(v) {
+  dirty = v; if (map) map._dirty = v;
+  $('status').textContent = v ? '● есть несохранённые изменения' : (map ? 'сохранено' : '');
+  $('status').className = v ? 'dirty' : '';
+}
+window.addEventListener('beforeunload', (e) => { if (project && Object.values(project.maps).some(m => m._dirty)) { e.preventDefault(); e.returnValue = ''; } });
+
+// ---------- отмена ----------
+const snap = () => JSON.stringify({w: map.width, h: map.height, g: map.ground.map(r => r.join('')), o: map.objects});
+function restore(s) {
+  const d = JSON.parse(s); map.width = d.w; map.height = d.h; map.ground = d.g.map(r => Array.from(r)); map.objects = d.o;
+  $('wIn').value = map.width; $('hIn').value = map.height; sel = null; showProps(); setDirty(true); draw();
+}
+function pushUndo() { undo.push(snap()); if (undo.length > 200) undo.shift(); redo.length = 0; }
+function doUndo() { if (undo.length) { redo.push(snap()); restore(undo.pop()); } }
+function doRedo() { if (redo.length) { undo.push(snap()); restore(redo.pop()); } }
+$('undoBtn').onclick = doUndo; $('redoBtn').onclick = doRedo;
+
+// ---------- правка карты ----------
+const sizeOf = (id) => (project.byId[id] && project.byId[id].size) || [1, 1];
+const inside = (x, y) => x >= 0 && y >= 0 && x < map.width && y < map.height;
+
+function objectAt(x, y) {
+  for (let i = map.objects.length - 1; i >= 0; i--) {
+    const o = map.objects[i], [w, h] = sizeOf(o.id);
+    if (x >= o.x && x < o.x + w && y >= o.y && y < o.y + h) return o;
+  }
+  return null;
+}
+
+// Курсор — нижняя середина объекта: так большие объекты ставятся «на землю», как в игре.
+function originFor(id, cx, cy) { const [w, h] = sizeOf(id); return [cx - Math.floor((w - 1) / 2), cy - (h - 1)]; }
+
+function place(id, ox, oy, extra) {
+  const [w, h] = sizeOf(id);
+  if (ox < 0 || oy < 0 || ox + w > map.width || oy + h > map.height) return null;
+  map.objects = map.objects.filter(o => {
+    if (id === 'spawn' && o.id === 'spawn') return false;    // старт игрока — только один
+    const [ow, oh] = sizeOf(o.id);
+    return o.x >= ox + w || o.x + ow <= ox || o.y >= oy + h || o.y + oh <= oy;
+  });
+  const o = {id, x: ox, y: oy, ...(extra || {})};
+  for (const p of (project.byId[id].props || [])) if (!(p in o)) o[p] = '';
+  map.objects.push(o); return o;
+}
+
+function brushCells(cx, cy) {
+  const n = +$('sizeSel').value, out = [], s = Math.floor((n - 1) / 2);
+  for (let y = cy - s; y < cy - s + n; y++) for (let x = cx - s; x < cx - s + n; x++) if (inside(x, y)) out.push([x, y]);
+  return out;
+}
+
+function paintAt(cx, cy) {
+  if (brush.kind === 'ground') { for (const [x, y] of brushCells(cx, cy)) map.ground[y][x] = brush.key; }
+  else {
+    const [w, h] = sizeOf(brush.key);
+    if (w === 1 && h === 1) for (const [x, y] of brushCells(cx, cy)) place(brush.key, x, y);
+    else { const [ox, oy] = originFor(brush.key, cx, cy); place(brush.key, ox, oy); }
+  }
+}
+
+function eraseAt(cx, cy) {
+  for (const [x, y] of brushCells(cx, cy)) { const o = objectAt(x, y); if (o) map.objects.splice(map.objects.indexOf(o), 1); }
+}
+
+function fillRect(a, b) {
+  const x0 = Math.max(0, Math.min(a[0], b[0])), x1 = Math.min(map.width - 1, Math.max(a[0], b[0]));
+  const y0 = Math.max(0, Math.min(a[1], b[1])), y1 = Math.min(map.height - 1, Math.max(a[1], b[1]));
+  if (brush.kind === 'ground') { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) map.ground[y][x] = brush.key; return; }
+  const [w, h] = sizeOf(brush.key);
+  for (let y = y0; y + h - 1 <= y1; y += h) for (let x = x0; x + w - 1 <= x1; x += w) place(brush.key, x, y);
+}
+
+// ---------- мышь и клавиатура ----------
+let drag = null, spaceDown = false;
+const cellAt = (e) => { const r = cv.getBoundingClientRect(); const s = T * zoom; return [Math.floor((e.clientX - r.left - panX) / s), Math.floor((e.clientY - r.top - panY) / s)]; };
+
+cv.addEventListener('contextmenu', e => e.preventDefault());
+cv.addEventListener('mousedown', (e) => {
+  if (!map) return;
+  if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+  const c = cellAt(e);
+  if (e.button === 2 || e.button === 1 || spaceDown) { drag = {mode: 'pan', x: e.clientX, y: e.clientY, px: panX, py: panY}; cv.style.cursor = 'grabbing'; return; }
+  if (e.button !== 0) return;
+  if (tool === 'select') {
+    sel = objectAt(c[0], c[1]); showProps();
+    if (sel) { pushUndo(); drag = {mode: 'move', obj: sel, dx: c[0] - sel.x, dy: c[1] - sel.y, moved: false}; }
+    draw(); return;
+  }
+  pushUndo();
+  if (tool === 'rect') { drag = {mode: 'rect', a: c, b: c}; draw(); return; }
+  drag = {mode: tool, last: c};
+  tool === 'erase' ? eraseAt(c[0], c[1]) : paintAt(c[0], c[1]);
+  setDirty(true); draw();
+});
+window.addEventListener('mousemove', (e) => {
+  if (!map) return;
+  const c = cellAt(e);
+  if (!hover || hover[0] !== c[0] || hover[1] !== c[1]) { hover = c; updateHover(); if (!drag) draw(); }
+  if (!drag) return;
+  if (drag.mode === 'pan') { panX = drag.px + e.clientX - drag.x; panY = drag.py + e.clientY - drag.y; draw(); return; }
+  if (drag.mode === 'rect') { drag.b = c; draw(); return; }
+  if (drag.mode === 'move') {
+    const nx = c[0] - drag.dx, ny = c[1] - drag.dy, [w, h] = sizeOf(drag.obj.id);
+    if ((nx !== drag.obj.x || ny !== drag.obj.y) && nx >= 0 && ny >= 0 && nx + w <= map.width && ny + h <= map.height) {
+      drag.obj.x = nx; drag.obj.y = ny; drag.moved = true; setDirty(true); showProps(); draw();
+    }
+    return;
+  }
+  if (drag.last[0] === c[0] && drag.last[1] === c[1]) return;
+  // проводим линию между прошлой и новой клеткой, чтобы быстрый штрих не рвался
+  const [x0, y0] = drag.last, steps = Math.max(Math.abs(c[0] - x0), Math.abs(c[1] - y0));
+  for (let i = 1; i <= steps; i++) {
+    const x = Math.round(x0 + (c[0] - x0) * i / steps), y = Math.round(y0 + (c[1] - y0) * i / steps);
+    drag.mode === 'erase' ? eraseAt(x, y) : paintAt(x, y);
+  }
+  drag.last = c; setDirty(true); draw();
+});
+window.addEventListener('mouseup', () => {
+  if (!drag) return;
+  if (drag.mode === 'rect') { fillRect(drag.a, drag.b); setDirty(true); }
+  if (drag.mode === 'move' && !drag.moved) undo.pop();     // просто щелчок, ничего не двигали
+  // объект, перетащенный на другие, вытесняет их — как при установке
+  if (drag.mode === 'move' && drag.moved) { const o = drag.obj; map.objects.splice(map.objects.indexOf(o), 1); const n = place(o.id, o.x, o.y, o); sel = n; showProps(); }
+  drag = null; cv.style.cursor = spaceDown ? 'grab' : 'crosshair'; draw();
+});
+cv.addEventListener('wheel', (e) => {
+  e.preventDefault(); if (!map) return;
+  const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+  const old = zoom; zoom = Math.max(0.5, Math.min(6, zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2)));
+  panX = mx - (mx - panX) * zoom / old; panY = my - (my - panY) * zoom / old; draw();
+}, {passive: false});
+cv.addEventListener('mouseleave', () => { hover = null; $('hover').textContent = ''; draw(); });
+
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'ы')) { e.preventDefault(); save(); return; }
+  if (e.target.matches('input, textarea, select')) return;
+  if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'я')) { e.preventDefault(); e.shiftKey ? doRedo() : doUndo(); return; }
+  if ((e.ctrlKey || e.metaKey) && (k === 'y' || k === 'н')) { e.preventDefault(); doRedo(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.code === 'Space') { spaceDown = true; cv.style.cursor = 'grab'; e.preventDefault(); return; }
+  const keys = {KeyB: 'brush', KeyR: 'rect', KeyE: 'erase', KeyV: 'select'};
+  if (keys[e.code]) setTool(keys[e.code]);
+  if (e.code === 'KeyG') { $('gridChk').checked = !$('gridChk').checked; showGrid = $('gridChk').checked; draw(); }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && sel) { pushUndo(); map.objects.splice(map.objects.indexOf(sel), 1); sel = null; showProps(); setDirty(true); draw(); }
+});
+window.addEventListener('keyup', (e) => { if (e.code === 'Space') { spaceDown = false; cv.style.cursor = 'crosshair'; } });
+$('gridChk').onchange = (e) => { showGrid = e.target.checked; draw(); };
+$('seasonSel').onchange = () => { for (const el of document.querySelectorAll('.item')) el._draw(); draw(); };
+
+function updateHover() {
+  if (!hover || !map || !inside(hover[0], hover[1])) { $('hover').textContent = ''; return; }
+  const [x, y] = hover, g = project.groundBy[map.ground[y][x]], o = objectAt(x, y);
+  $('hover').textContent = 'клетка ' + x + ', ' + y + ' · ' + (g ? g.name : map.ground[y][x]) + (o ? ' · ' + (project.byId[o.id] ? project.byId[o.id].name : o.id) : '');
+}
+
+// ---------- свойства выбранного ----------
+const PROP_NAMES = {text: 'Текст таблички', to: 'Куда ведёт (имя карты латиницей, например market)'};
+function showProps() {
+  const box = $('props');
+  if (!sel) { box.className = 'props hint'; box.textContent = 'Выберите объект инструментом «Выбор».'; return; }
+  const def = project.byId[sel.id] || {name: sel.id}, [w, h] = sizeOf(sel.id);
+  box.className = 'props'; box.innerHTML = '';
+  const t = document.createElement('div'); t.innerHTML = '<b></b><div class="hint"></div>';
+  t.querySelector('b').textContent = def.name;
+  t.querySelector('.hint').textContent = 'клетка ' + sel.x + ', ' + sel.y + (w > 1 || h > 1 ? ' · размер ' + w + '×' + h : '');
+  box.appendChild(t);
+  for (const p of (def.props || [])) {
+    const l = document.createElement('label'); l.textContent = PROP_NAMES[p] || p; box.appendChild(l);
+    const inp = document.createElement(p === 'text' ? 'textarea' : 'input'); inp.value = sel[p] || '';
+    if (p === 'to') { inp.setAttribute('list', 'mapIds'); }
+    inp.oninput = () => { sel[p] = inp.value; setDirty(true); draw(); };
+    box.appendChild(inp);
+  }
+  const del = document.createElement('button'); del.textContent = 'Удалить (Delete)'; del.style.marginTop = '12px';
+  del.onclick = () => { pushUndo(); map.objects.splice(map.objects.indexOf(sel), 1); sel = null; showProps(); setDirty(true); draw(); };
+  box.appendChild(del);
+  let dl = $('mapIds'); if (!dl) { dl = document.createElement('datalist'); dl.id = 'mapIds'; document.body.appendChild(dl); }
+  dl.innerHTML = Object.keys(project.maps).map(id => '<option value="' + id + '">').join('');
+}
+
+// ---------- рисование ----------
+function fitView() {
+  const r = $('view').getBoundingClientRect();
+  zoom = Math.max(0.5, Math.min(4, Math.min((r.width - 40) / (map.width * T), (r.height - 40) / (map.height * T))));
+  panX = (r.width - map.width * T * zoom) / 2; panY = (r.height - map.height * T * zoom) / 2;
+}
+
+function resize() {
+  const r = $('view').getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); draw();
+}
+window.addEventListener('resize', resize);
+
+function blit(name, dx, dy, alpha) {
+  const s = project.sprites[name]; if (!s) return false;
+  const k = zoom;
+  if (alpha != null) ctx.globalAlpha = alpha;
+  ctx.drawImage(project.img, s.x, s.y, s.w, s.h, Math.round(panX + dx * k), Math.round(panY + dy * k), Math.ceil(s.w * k), Math.ceil(s.h * k));
+  ctx.globalAlpha = 1; return true;
+}
+
+// Объект стоит нижней серединой своих клеток — как в игре.
+function drawObject(o, alpha) {
+  const def = project.byId[o.id], [w, h] = sizeOf(o.id), s = T * zoom;
+  const name = def && spriteName(def), sp = name && project.sprites[name];
+  if (sp) {
+    blit(name, o.x * T + (w * T - sp.w) / 2, (o.y + h) * T - sp.ay, alpha);
+    return;
+  }
+  // служебные метки рисуем значками
+  const x = panX + o.x * s, y = panY + o.y * s;
+  ctx.globalAlpha = alpha == null ? 0.85 : alpha;
+  ctx.fillStyle = (def && def.color) || '#f0f'; ctx.fillRect(x + 2, y + 2, w * s - 4, h * s - 4);
+  ctx.globalAlpha = 1; ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(x + 2.5, y + 2.5, w * s - 5, h * s - 5);
+  ctx.fillStyle = '#000'; ctx.font = 'bold ' + Math.max(9, Math.round(s * 0.55)) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(o.id === 'spawn' ? '★' : o.id === 'exit' ? '→' : '?', x + w * s / 2, y + h * s / 2);
+  if (o.id === 'exit' && o.to && zoom >= 1) {
+    ctx.font = Math.max(9, Math.round(s * 0.4)) + 'px sans-serif'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+    ctx.strokeText(o.to, x + s / 2, y + s * 1.25); ctx.fillText(o.to, x + s / 2, y + s * 1.25);
+  }
+}
+
+function draw() {
+  const d = window.devicePixelRatio || 1;
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#12151e'; ctx.fillRect(0, 0, cv.width, cv.height);
+  if (!map) return;
+  const s = T * zoom, W = cv.width / d, H = cv.height / d;
+  const x0 = Math.max(0, Math.floor(-panX / s)), y0 = Math.max(0, Math.floor(-panY / s));
+  const x1 = Math.min(map.width - 1, Math.floor((W - panX) / s)), y1 = Math.min(map.height - 1, Math.floor((H - panY) / s));
+  // земля
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const key = map.ground[y][x], name = groundSprite(key, x, y);
+    if (key === '~') blit('path_0', x * T, y * T);
+    if (!name || !blit(name, x * T, y * T)) {
+      ctx.fillStyle = (project.groundBy[key] || {}).color || '#f0f';
+      ctx.fillRect(panX + x * s, panY + y * s, Math.ceil(s), Math.ceil(s));
+    }
+    if (key === ',' && !objectAt(x, y)) { const f = flowerSprite(x, y); if (f) { const sp = project.sprites[f]; blit(f, x * T + (T - sp.w) / 2, (y + 1) * T - sp.ay); } }
+  }
+  // объекты по рядам, сверху вниз, чтобы ближние перекрывали дальние
+  const objs = [...map.objects].sort((a, b) => (a.y + sizeOf(a.id)[1]) - (b.y + sizeOf(b.id)[1]));
+  for (const o of objs) drawObject(o);
+  // сетка
+  if (showGrid && s >= 6) {
+    ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (let x = x0; x <= x1 + 1; x++) { const px = Math.round(panX + x * s) + .5; ctx.moveTo(px, panY + y0 * s); ctx.lineTo(px, panY + (y1 + 1) * s); }
+    for (let y = y0; y <= y1 + 1; y++) { const py = Math.round(panY + y * s) + .5; ctx.moveTo(panX + x0 * s, py); ctx.lineTo(panX + (x1 + 1) * s, py); }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.beginPath();
+    for (let x = 0; x <= map.width; x += 10) { const px = Math.round(panX + x * s) + .5; ctx.moveTo(px, panY); ctx.lineTo(px, panY + map.height * s); }
+    for (let y = 0; y <= map.height; y += 10) { const py = Math.round(panY + y * s) + .5; ctx.moveTo(panX, py); ctx.lineTo(panX + map.width * s, py); }
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#d9b45a'; ctx.lineWidth = 2; ctx.strokeRect(panX - 1, panY - 1, map.width * s + 2, map.height * s + 2);
+  // выделение
+  if (sel) { const [w, h] = sizeOf(sel.id); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.setLineDash([5, 3]); ctx.strokeRect(panX + sel.x * s + 1, panY + sel.y * s + 1, w * s - 2, h * s - 2); ctx.setLineDash([]); }
+  // что будет сделано под курсором
+  if (drag && drag.mode === 'rect') {
+    const a = drag.a, b = drag.b;
+    ctx.fillStyle = 'rgba(240,207,122,.25)'; ctx.strokeStyle = '#f0cf7a'; ctx.lineWidth = 2;
+    const rx = Math.min(a[0], b[0]), ry = Math.min(a[1], b[1]), rw = Math.abs(a[0] - b[0]) + 1, rh = Math.abs(a[1] - b[1]) + 1;
+    ctx.fillRect(panX + rx * s, panY + ry * s, rw * s, rh * s); ctx.strokeRect(panX + rx * s, panY + ry * s, rw * s, rh * s);
+  } else if (hover && inside(hover[0], hover[1]) && (tool === 'brush' || tool === 'erase' || tool === 'rect')) {
+    if (tool !== 'erase' && brush.kind === 'object' && tool === 'brush') {
+      const [w, h] = sizeOf(brush.key), [ox, oy] = originFor(brush.key, hover[0], hover[1]);
+      const ok = ox >= 0 && oy >= 0 && ox + w <= map.width && oy + h <= map.height;
+      if (w === 1 && h === 1) for (const [x, y] of brushCells(hover[0], hover[1])) drawObject({id: brush.key, x, y}, 0.55);
+      else drawObject({id: brush.key, x: ox, y: oy}, 0.55);
+      ctx.strokeStyle = ok ? '#fff' : '#e06060'; ctx.lineWidth = 2;
+      if (w > 1 || h > 1) ctx.strokeRect(panX + ox * s, panY + oy * s, w * s, h * s);
+    } else {
+      ctx.strokeStyle = tool === 'erase' ? '#e06060' : '#fff'; ctx.lineWidth = 2;
+      const n = +$('sizeSel').value, st = Math.floor((n - 1) / 2);
+      ctx.strokeRect(panX + (hover[0] - st) * s, panY + (hover[1] - st) * s, n * s, n * s);
+    }
+  }
+  $('undoBtn').disabled = !undo.length; $('redoBtn').disabled = !redo.length;
+}
+
+let toastTimer = 0;
+function toast(text, err) {
+  const t = $('toast'); t.textContent = text; t.className = err ? 'err' : ''; t.style.display = 'block';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.style.display = 'none', err ? 5000 : 2500);
+}
+
+setTool('brush');
+resize();
+// открыт через веб-сервер рядом с папкой godot (так редактор проверяется автоматически)
+if (location.protocol.startsWith('http')) {
+  const base = new URLSearchParams(location.search).get('project') || '../godot/';
+  loadProject(httpSource(base)).catch(() => {});
+}
+window.__editor = {get map() { return map; }, mapToText, save, setTool, pick: (kind, key) => { brush = {kind, key}; markPalette(); }};
+</script>
+</body>
+</html>
