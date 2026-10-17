@@ -8,17 +8,20 @@ const Location := preload("res://scripts/location.gd")
 
 var main: Node
 var farm := Farm.new()
-## Что сейчас в руках у этого игрока: "hoe", "can" или "seed" (тогда crop — какие семена).
-var tool := "hoe"
-var tool_crop := ""
+## Свой инвентарь (копия от хозяина), выбранная ячейка и ряд панели быстрого доступа.
+var my_inv: Array = Farm.new_inventory()
+var sel := 0
+var row := 0
 var my_water := Farm.CAN_CAP
 var sleeping := {}           # у хозяина: id игрока -> лёг спать
 var _picking := {}           # id предметов, которые мы уже попросили подобрать
+var _full: Array = []        # что не влезло в инвентарь: не тянем к себе, пока не отойдём
 
 
 func setup(p_main: Node) -> void:
 	main = p_main
 	name = "FarmNet"
+	farm.inv[1] = my_inv
 
 
 func is_host() -> bool:
@@ -29,31 +32,41 @@ func me_id() -> int:
 	return multiplayer.get_unique_id()
 
 
-# ---------- пояс: инструменты и семена ----------
+# ---------- что в руках ----------
 
-## Мотыга, лейка и все семена, которые есть (до 12 ячеек).
-func belt() -> Array:
-	var out := [{"tool": "hoe", "crop": ""}, {"tool": "can", "crop": ""}]
-	for c in Farm.CROPS:
-		var k: String = c["key"]
-		if out.size() < 12 and (farm.seeds.get(k, 0) > 0 or (tool == "seed" and tool_crop == k)):
-			out.append({"tool": "seed", "crop": k})
-	return out
+## Предмет в выбранной ячейке (или null).
+func held() -> Variant:
+	return my_inv[sel] if sel < my_inv.size() else null
 
 
-func select(slot: Dictionary) -> void:
-	tool = slot["tool"]
-	tool_crop = slot["crop"]
+## Чем сейчас работаем: "hoe", "can", "axe", "pick", "seed" или "" (пустые руки, урожай).
+func tool() -> String:
+	var h: Variant = held()
+	if h == null:
+		return ""
+	var id: String = h["id"]
+	if id.begins_with("tool:"):
+		return id.get_slice(":", 1)
+	return "seed" if id.begins_with("seed:") else ""
+
+
+func select(slot: int) -> void:
+	sel = slot
+
+
+func set_row(r: int) -> void:
+	row = posmod(r, Farm.ROWS)
+	sel = row * Farm.ROW + sel % Farm.ROW
 
 
 func tool_name() -> String:
-	match tool:
-		"hoe":
-			return "Мотыга"
-		"can":
-			return "Лейка (%d из %d)" % [my_water, Farm.CAN_CAP]
-	var c := Farm.crop(tool_crop)
-	return "%s (%d)" % [c.get("seed_name", ""), farm.seeds.get(tool_crop, 0)]
+	var h: Variant = held()
+	if h == null:
+		return "ничего"
+	var info := Farm.item_info(h["id"])
+	if h["id"] == "tool:can":
+		return "Лейка (%d из %d)" % [my_water, Farm.CAN_CAP]
+	return info["name"] + (" (%d)" % h["n"] if h["n"] > 1 or info["stack"] > 1 else "")
 
 
 # ---------- действия ----------
@@ -68,7 +81,8 @@ func is_target(cell: Vector2i) -> bool:
 		return true
 	if farm.plot_at(cell.x, cell.y) != null:
 		return true
-	return tool != "can" and Farm.farmable(map, cell.x, cell.y)
+	var t := tool()
+	return (t == "hoe" or t == "seed") and Farm.farmable(map, cell.x, cell.y)
 
 
 ## Игрок стоит рядом с клеткой и применяет к ней то, что в руках (или осматривает предмет).
@@ -102,7 +116,7 @@ func act(cell: Vector2i) -> void:
 	if map.ground_at(cell.x, cell.y) == "~":
 		request("refill")
 		return
-	request("use", [cell.x, cell.y, tool, tool_crop])
+	request("use", [cell.x, cell.y, sel])
 
 
 ## Попросить хозяина что-то сделать. Если хозяин — мы сами, делаем сразу.
@@ -125,13 +139,13 @@ func _host(peer: int, action: String, args: Array) -> void:
 		"use":
 			var x: int = args[0]
 			var y: int = args[1]
-			var r := farm.use(main.map, peer, x, y, args[2], args[3])
+			var r := farm.use(main.map, peer, x, y, args[2])
 			if r.has("msg"):
 				_to(peer, "net_toast", [r["msg"]])
 			if r.get("plot", false):
 				_all("net_plot", [x, y, farm.plot_at(x, y)])
 			if r.get("inv", false):
-				_send_inv()
+				_send_my_inv(peer)
 			if r.get("water", false):
 				_to(peer, "net_water", [farm.water_of(peer)])
 			if r.has("harvest"):
@@ -144,17 +158,39 @@ func _host(peer: int, action: String, args: Array) -> void:
 				_to(peer, "net_water", [Farm.CAN_CAP])
 				_to(peer, "net_toast", ["Лейка наполнена: %d л." % Farm.CAN_CAP])
 		"ship":
-			farm.ship(args[0], args[1])
+			farm.ship(peer, args[0], args[1])
+			_send_my_inv(peer)
 			_send_inv()
 		"pickup":
 			var id: int = args[0]
 			if farm.drops.has(id):
-				var key: String = farm.drops[id]["key"]
-				farm.drops.erase(id)
-				farm.produce[key] = farm.produce.get(key, 0) + 1
-				_all("net_drop_gone", [id])
-				_send_inv()
-				_to(peer, "net_toast", ["+1 " + String(Farm.crop(key)["product"]).to_lower()])
+				var d: Dictionary = farm.drops[id]
+				var left := farm.add_item(peer, d["item"], d["n"])
+				var got: int = d["n"] - left
+				if got <= 0:
+					_to(peer, "net_full_bag", [id])
+					return
+				_send_my_inv(peer)
+				_to(peer, "net_toast", ["+%d %s" % [got, String(Farm.item_info(d["item"])["name"]).to_lower()]])
+				if left > 0:
+					d["n"] = left
+					_to(peer, "net_full_bag", [id])
+				else:
+					farm.drops.erase(id)
+					_all("net_drop_gone", [id])
+		"drop":
+			# выбросить из ячейки на землю перед собой: args = [ячейка, сколько (0 — всё), x, z]
+			var got: Variant = farm.take(peer, args[0], args[1])
+			if got != null:
+				_send_my_inv(peer)
+				var did := farm.add_drop(got["id"], got["n"], args[2], args[3])
+				_all("net_drops", [[[did, got["id"], got["n"], args[2], args[3], args[2], args[3], peer]]])
+		"erase":
+			if farm.take(peer, args[0], 0) != null:
+				_send_my_inv(peer)
+		"move":
+			farm.move(peer, args[0], args[1])
+			_send_my_inv(peer)
 		"sleep":
 			sleeping[peer] = true
 			_check_sleep()
@@ -171,13 +207,19 @@ func _spill(x: int, y: int, key: String, n: int) -> void:
 		var a := randf() * TAU
 		var r := 0.2 + randf() * 0.8
 		var to := from + Vector3(cos(a) * r, 0, sin(a) * r * 0.8)
-		var id := farm.add_drop(key, to.x, to.z)
-		list.append([id, key, from.x, from.z, to.x, to.z])
+		var id := farm.add_drop("prod:" + key, 1, to.x, to.z)
+		list.append([id, "prod:" + key, 1, from.x, from.z, to.x, to.z, 0])
 	_all("net_drops", [list])
 
 
+## Общее: деньги и что лежит в ящике для продажи.
 func _send_inv() -> void:
-	_all("net_inv", [farm.money, farm.seeds, farm.produce, farm.shipped])
+	_all("net_inv", [farm.money, farm.shipped])
+
+
+## Свой инвентарь — только его хозяину.
+func _send_my_inv(peer: int) -> void:
+	_to(peer, "net_my_inv", [farm.inv_of(peer)])
 
 
 ## Новый день наступает, когда спать легли все. Пока нет — тем, кто лёг, показываем, кого ждём.
@@ -209,19 +251,31 @@ func on_peer_connected(id: int) -> void:
 	if is_host():
 		farm.water[id] = Farm.CAN_CAP
 		_to(id, "net_full", [farm.to_dict(), main.minutes])
+		_send_my_inv(id)
 
 
 func on_peer_disconnected(id: int) -> void:
 	if is_host():
 		farm.water.erase(id)
+		farm.inv.erase(id)
 		sleeping.erase(id)
 		if not sleeping.is_empty():
 			_check_sleep()
 
 
+## Хозяин пропал: дальше играем одни со своим огородом и своим инвентарём.
+func on_lost_host() -> void:
+	farm.inv = {1: my_inv}
+	farm.water = {1: my_water}
+	sleeping.clear()
+
+
 ## Предметы на земле сами летят к игроку; долетевшие просим у хозяина положить в инвентарь.
 func tick(delta: float) -> void:
-	for id in main.world.pull_drops(main.me.position, delta):
+	for id in _full.duplicate():
+		if main.world.drop_distance(id, main.me.position) > 2.0:
+			_full.erase(id)
+	for id in main.world.pull_drops(main.me.position, delta, _full):
 		if not _picking.has(id):
 			_picking[id] = true
 			request("pickup", [id])
@@ -259,12 +313,27 @@ func net_plot(x: int, y: int, p: Variant) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func net_inv(money: int, seeds: Dictionary, produce: Dictionary, shipped: Dictionary) -> void:
+func net_inv(money: int, shipped: Dictionary) -> void:
 	farm.money = money
-	farm.seeds = seeds
-	farm.produce = produce
 	farm.shipped = shipped
 	main.hud.refresh_farm()
+
+
+@rpc("authority", "call_remote", "reliable")
+func net_my_inv(slots: Array) -> void:
+	my_inv = slots
+	if is_host():
+		farm.inv[me_id()] = slots
+	main.hud.refresh_farm()
+
+
+## Подобрать не вышло: инвентарь полон. Попробуем снова, когда отойдём и подойдём.
+@rpc("authority", "call_remote", "reliable")
+func net_full_bag(id: int) -> void:
+	main.hud.toast("Инвентарь полон.")
+	_picking.erase(id)
+	if id not in _full:
+		_full.append(id)
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -274,15 +343,20 @@ func net_water(n: int) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func net_drops(list: Array) -> void:
+	# [id, предмет, сколько, откуда x, z, куда x, z, кто выбросил (0 — никто)]
 	for d in list:
-		farm.drops[int(d[0])] = {"key": d[1], "x": d[4], "z": d[5]}
-		main.world.add_drop(int(d[0]), d[1], Vector3(d[2], 0, d[3]), Vector3(d[4], 0, d[5]))
+		farm.drops[int(d[0])] = {"item": d[1], "n": d[2], "x": d[5], "z": d[6]}
+		main.world.add_drop(int(d[0]), d[1], Vector3(d[3], 0, d[4]), Vector3(d[5], 0, d[6]))
+		# своё выброшенное не притягивается, пока не отойдёшь (иначе сразу прилетит обратно)
+		if int(d[7]) == me_id():
+			_full.append(int(d[0]))
 
 
 @rpc("authority", "call_remote", "reliable")
 func net_drop_gone(id: int) -> void:
 	farm.drops.erase(id)
 	_picking.erase(id)
+	_full.erase(id)
 	main.world.remove_drop(id)
 
 

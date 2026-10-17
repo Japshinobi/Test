@@ -22,6 +22,8 @@ var tool_label: Label
 var toast_label: Label
 var _toast_t := 0.0
 var _belt_sig := ""
+var _menu: PopupMenu
+const SLOT := 58
 
 ## Открытое окно (или null) и его вид: "message", "sleep", "wait", "morning", "ship", "inventory".
 var dialog: PanelContainer
@@ -104,11 +106,25 @@ func setup(p_main: Node) -> void:
 	bottom.add_child(tool_label)
 	var belt_panel := _panel(bottom)
 	belt_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var belt_row := HBoxContainer.new()
+	belt_row.add_theme_constant_override("separation", 6)
+	belt_panel.add_child(belt_row)
 	belt_box = HBoxContainer.new()
 	belt_box.add_theme_constant_override("separation", 6)
-	belt_panel.add_child(belt_box)
+	belt_row.add_child(belt_box)
+	# две стрелки справа: ряд выше / ряд ниже (вместе — высотой с ячейку, шириной в половину)
+	var arrows := VBoxContainer.new()
+	arrows.add_theme_constant_override("separation", 0)
+	belt_row.add_child(arrows)
+	for up in [true, false]:
+		var a := ArrowButton.new()
+		a.up = up
+		a.custom_minimum_size = Vector2(SLOT / 2.0, SLOT / 2.0)
+		a.focus_mode = Control.FOCUS_NONE
+		a.pressed.connect(func() -> void: main.farmnet.set_row(main.farmnet.row + (-1 if up else 1)))
+		arrows.add_child(a)
 	var hint := _outlined_label(13)
-	hint.text = "Тап — подойти и сделать · тянуть или Q/E — камера · два пальца или колесо — приблизить · пробел — действие · 1–9 — пояс · I — инвентарь"
+	hint.text = "Тап — подойти и сделать · тянуть или Q/E — камера · два пальца или колесо — приблизить · пробел — действие · 1–0 — панель · I — инвентарь · долгое нажатие на предмет — меню"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.custom_minimum_size = Vector2(760, 0)
@@ -160,28 +176,44 @@ func toast(text: String) -> void:
 	_toast_t = 2.8
 
 
-# ---------- пояс ----------
+# ---------- панель быстрого доступа ----------
+# Как в Stardew Valley: панель — это ряды самого инвентаря (по 10 ячеек), стрелки переключают ряд.
 
 func _refresh_belt() -> void:
 	var fn: Node = main.farmnet
-	var belt: Array = fn.belt()
-	var sig: String = str(belt) + String(fn.tool) + String(fn.tool_crop) + str(fn.farm.seeds)
+	var sig: String = str(fn.my_inv) + "|" + str(fn.sel) + "|" + str(fn.row) + "|" + str(fn.my_water)
 	if sig == _belt_sig:
 		return
 	_belt_sig = sig
 	for c in belt_box.get_children():
 		c.queue_free()
-	for i in belt.size():
-		var slot: Dictionary = belt[i]
-		var b := Button.new()
-		b.custom_minimum_size = Vector2(58, 58)
-		b.focus_mode = Control.FOCUS_NONE
-		b.tooltip_text = _slot_name(slot)
-		var on: bool = slot["tool"] == fn.tool and slot["crop"] == fn.tool_crop
-		if on:
-			b.add_theme_stylebox_override("normal", _box(Color("#4a63a8"), Color("#f0cf7a"), 3))
+	for i in Farm.ROW:
+		belt_box.add_child(_slot_button(fn.row * Farm.ROW + i))
+	if dialog_kind == "inventory":
+		_fill_inventory_grid()
+
+
+## Ячейка инвентаря: картинка, количество, выделение; её можно перетаскивать и долго нажимать.
+func _slot_button(index: int) -> Button:
+	var fn: Node = main.farmnet
+	var b := SlotButton.new()
+	b.hud = self
+	b.index = index
+	b.custom_minimum_size = Vector2(SLOT, SLOT)
+	b.focus_mode = Control.FOCUS_NONE
+	if index >= Farm.INV_SIZE:
+		b.disabled = true
+		b.tooltip_text = "Закрыто: инвентарь можно будет расширить"
+		return b
+	var it: Variant = fn.my_inv[index]
+	if index == fn.sel:
+		b.add_theme_stylebox_override("normal", _box(Color("#4a63a8"), Color("#f0cf7a"), 3))
+		b.add_theme_stylebox_override("hover", _box(Color("#5570b8"), Color("#f0cf7a"), 3))
+	if it != null:
+		var info := Farm.item_info(it["id"])
+		b.tooltip_text = info["name"]
 		var icon := TextureRect.new()
-		icon.texture = _icon(_slot_icon(slot))
+		icon.texture = _icon(info["icon"])
 		icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		icon.offset_left = 9
 		icon.offset_top = 9
@@ -191,41 +223,78 @@ func _refresh_belt() -> void:
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(icon)
-		if slot["tool"] == "seed":
+		if it["n"] > 1:
 			var n := _outlined_label(13)
-			n.text = str(fn.farm.seeds.get(slot["crop"], 0))
+			n.text = str(it["n"])
 			n.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			n.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 			n.set_anchors_preset(Control.PRESET_FULL_RECT)
 			n.offset_right = -4
 			n.offset_bottom = -1
 			b.add_child(n)
-		b.pressed.connect(func() -> void: fn.select(slot))
-		belt_box.add_child(b)
+	b.pressed.connect(func() -> void: fn.select(index))
+	return b
 
 
+## Клавиши 1–0: ячейка в текущем ряду.
 func select_slot(i: int) -> void:
-	var belt: Array = main.farmnet.belt()
-	if i < belt.size():
-		main.farmnet.select(belt[i])
+	var fn: Node = main.farmnet
+	fn.select(fn.row * Farm.ROW + i)
 
 
-static func _slot_icon(slot: Dictionary) -> String:
-	match slot["tool"]:
-		"hoe":
-			return "icon_hoe"
-		"can":
-			return "icon_can"
-	return "seed_" + String(slot["crop"])
+## Меню предмета по долгому нажатию (или правой кнопкой).
+func open_item_menu(index: int) -> void:
+	var fn: Node = main.farmnet
+	if index >= fn.my_inv.size() or fn.my_inv[index] == null:
+		return
+	var info := Farm.item_info(fn.my_inv[index]["id"])
+	if _menu:
+		_menu.queue_free()
+	_menu = PopupMenu.new()
+	_menu.add_theme_font_size_override("font_size", 20)
+	_menu.add_item("Выбросить", 0)
+	_menu.add_item("Использовать", 1)
+	_menu.set_item_disabled(1, not info["edible"])
+	_menu.add_item("Стереть", 2)
+	root.add_child(_menu)
+	_menu.id_pressed.connect(_on_item_menu.bind(index))
+	_menu.position = Vector2i(get_viewport().get_mouse_position())
+	_menu.popup()
 
 
-static func _slot_name(slot: Dictionary) -> String:
-	match slot["tool"]:
-		"hoe":
-			return "Мотыга"
-		"can":
-			return "Лейка"
-	return Farm.crop(slot["crop"]).get("seed_name", "")
+func _on_item_menu(id: int, index: int) -> void:
+	if id == 0:
+		drop_slot(index)
+	elif id == 2:
+		_confirm_erase(index)
+
+
+## Выбросить предмет из ячейки на землю перед собой.
+func drop_slot(index: int) -> void:
+	var me: Node3D = main.me
+	var f: float = main.me.face
+	var p := me.position + Vector3(sin(f), 0, cos(f)) * 0.9
+	main.farmnet.request("drop", [index, 0, p.x, p.z])
+
+
+func _confirm_erase(index: int) -> void:
+	var fn: Node = main.farmnet
+	var it: Variant = fn.my_inv[index]
+	if it == null:
+		return
+	var reopen := dialog_kind == "inventory"
+	var v := _open("erase", "Стереть предмет?")
+	_text(v, "«%s» (%d шт.) исчезнет совсем. Это нельзя отменить." % [Farm.item_info(it["id"])["name"], it["n"]])
+	var h := _buttons(v)
+	_button(h, "Стереть", func() -> void:
+		close_dialog()
+		fn.request("erase", [index])
+		if reopen:
+			open_inventory())
+	_button(h, "Отмена", func() -> void:
+		close_dialog()
+		if reopen:
+			open_inventory())
 
 
 func _icon(name: String) -> Texture2D:
@@ -241,7 +310,8 @@ func _icon(name: String) -> Texture2D:
 func _open(kind: String, title: String, width := 520) -> VBoxContainer:
 	close_dialog()
 	dialog_kind = kind
-	var shade := ColorRect.new()
+	var shade := DropZone.new()
+	shade.hud = self
 	shade.color = Color(0, 0, 0, 0.35)
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	shade.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -251,6 +321,7 @@ func _open(kind: String, title: String, width := 520) -> VBoxContainer:
 	dialog.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	root.add_child(dialog)
 	var center := CenterContainer.new()
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE    # чтобы предмет можно было бросить на затемнение вокруг окна
 	dialog.add_child(center)
 	var p := PanelContainer.new()
 	p.custom_minimum_size = Vector2(width, 0)
@@ -363,12 +434,15 @@ func open_ship() -> void:
 
 func _fill_ship(v: VBoxContainer) -> void:
 	var farm: Farm = main.farmnet.farm
-	_text(v, "Положите урожай — утром за него заплатят (на 10% дешевле, чем на рынке).", 15)
+	_text(v, "Положите урожай — утром за него заплатят (на 10% дешевле, чем на рынке). Деньги общие.", 15)
 	var any := false
 	var total := 0
 	for c in Farm.CROPS:
 		var k: String = c["key"]
-		var n: int = farm.produce.get(k, 0)
+		var n := 0
+		for it in main.farmnet.my_inv:
+			if it != null and it["id"] == "prod:" + k:
+				n += it["n"]
 		if n <= 0:
 			continue
 		any = true
@@ -402,35 +476,26 @@ func _fill_ship(v: VBoxContainer) -> void:
 func open_inventory() -> void:
 	if is_busy():
 		return
-	var farm: Farm = main.farmnet.farm
-	var v := _open("inventory", "Инвентарь", 560)
-	_text(v, "Монеты: %d (общие)" % farm.money)
-	for part in [["Семена", farm.seeds, "seed_"], ["Урожай", farm.produce, "prod_"]]:
-		_text(v, part[0], 15).add_theme_color_override("font_color", Color("#9aa0b4"))
-		var grid := GridContainer.new()
-		grid.columns = 5
-		grid.add_theme_constant_override("h_separation", 8)
-		v.add_child(grid)
-		var any := false
-		for c in Farm.CROPS:
-			var n: int = part[1].get(c["key"], 0)
-			if n <= 0:
-				continue
-			any = true
-			var cell := VBoxContainer.new()
-			cell.custom_minimum_size = Vector2(92, 0)
-			var icon := TextureRect.new()
-			icon.texture = _icon(part[2] + String(c["key"]))
-			icon.custom_minimum_size = Vector2(40, 40)
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			cell.add_child(icon)
-			var l := _text(cell, "%s\n× %d" % [c["name"], n], 13)
-			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			grid.add_child(cell)
-		if not any:
-			_text(v, "пусто", 14)
+	var v := _open("inventory", "Инвентарь", 700)
+	_text(v, "Монеты (общие): %d. Перетащите предмет в другую ячейку или за край окна — выбросить на землю. Долгое нажатие — меню." % main.farmnet.farm.money, 14)
+	var grid := GridContainer.new()
+	grid.name = "Grid"
+	grid.columns = Farm.ROW
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	v.add_child(grid)
+	_fill_inventory_grid()
 	_button(_buttons(v), "Закрыть", close_dialog)
+
+
+func _fill_inventory_grid() -> void:
+	var grid: Node = dialog.find_child("Grid", true, false) if dialog else null
+	if grid == null:
+		return
+	for c in grid.get_children():
+		c.queue_free()
+	for i in Farm.ROW * Farm.ROWS:
+		grid.add_child(_slot_button(i))
 
 
 ## Огород изменился (деньги, семена, урожай): обновить открытое окно.
@@ -438,8 +503,7 @@ func refresh_farm() -> void:
 	if dialog_kind == "ship":
 		open_ship()
 	elif dialog_kind == "inventory":
-		close_dialog()
-		open_inventory()
+		_fill_inventory_grid()
 
 
 # ---------- оформление ----------
@@ -501,3 +565,75 @@ func _theme() -> Theme:
 	th.set_color("font_hover_color", "Button", Color.WHITE)
 	th.set_color("font_color", "Label", Color("#f4e6c0"))
 	return th
+
+
+## Ячейка инвентаря: тап — взять в руки, перетаскивание — переложить, долгое нажатие — меню.
+class SlotButton extends Button:
+	const FarmScript := preload("res://scripts/farm.gd")
+	var hud: Node
+	var index := 0
+	var _down_t := -1.0
+	var _down_pos := Vector2.ZERO
+
+	func _get_drag_data(_pos: Vector2) -> Variant:
+		var inv: Array = hud.main.farmnet.my_inv
+		if index >= inv.size() or inv[index] == null:
+			return null
+		_down_t = -1.0
+		var preview := TextureRect.new()
+		preview.texture = hud._icon(FarmScript.item_info(inv[index]["id"])["icon"])
+		preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		preview.size = Vector2(48, 48)
+		set_drag_preview(preview)
+		return {"slot": index}
+
+	func _can_drop_data(_pos: Vector2, data: Variant) -> bool:
+		return data is Dictionary and data.has("slot") and index < FarmScript.INV_SIZE
+
+	func _drop_data(_pos: Vector2, data: Variant) -> void:
+		hud.main.farmnet.request("move", [data["slot"], index])
+
+	func _gui_input(e: InputEvent) -> void:
+		if e is InputEventMouseButton:
+			if e.button_index == MOUSE_BUTTON_RIGHT and e.pressed:
+				hud.open_item_menu(index)
+				accept_event()
+			elif e.button_index == MOUSE_BUTTON_LEFT:
+				if e.pressed:
+					_down_t = 0.0
+					_down_pos = e.position
+				else:
+					_down_t = -1.0
+		elif e is InputEventMouseMotion and _down_t >= 0.0 and e.position.distance_to(_down_pos) > 10.0:
+			_down_t = -1.0
+
+	func _process(delta: float) -> void:
+		if _down_t >= 0.0:
+			_down_t += delta
+			if _down_t > 0.55:
+				_down_t = -1.0
+				hud.open_item_menu(index)
+
+
+## Затемнение вокруг окна: предмет, брошенный сюда из инвентаря, падает на землю.
+class DropZone extends ColorRect:
+	var hud: Node
+
+	func _can_drop_data(_pos: Vector2, data: Variant) -> bool:
+		return hud.dialog_kind == "inventory" and data is Dictionary and data.has("slot")
+
+	func _drop_data(_pos: Vector2, data: Variant) -> void:
+		hud.drop_slot(data["slot"])
+
+
+## Стрелка переключения ряда панели.
+class ArrowButton extends Button:
+	var up := true
+
+	func _draw() -> void:
+		var c := size / 2.0
+		var w := size.x * 0.28
+		var h := size.y * 0.2
+		var k := -1.0 if up else 1.0
+		var pts := PackedVector2Array([c + Vector2(0, h * k), c + Vector2(w, -h * k), c + Vector2(-w, -h * k)])
+		draw_colored_polygon(pts, Color("#f4e6c0"))

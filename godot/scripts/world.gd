@@ -80,7 +80,7 @@ func build(day: int, farm: Farm) -> void:
 		sync_plot(int(xy[0]), int(xy[1]), farm.plots[key])
 	for id in farm.drops:
 		var d: Dictionary = farm.drops[id]
-		add_drop(id, d["key"], Vector3(d["x"], 0, d["z"]), Vector3(d["x"], 0, d["z"]))
+		add_drop(id, d["item"], Vector3(d["x"], 0, d["z"]), Vector3(d["x"], 0, d["z"]))
 	set_tint(_tint)
 
 
@@ -145,15 +145,15 @@ func sync_plot(x: int, y: int, p: Variant) -> void:
 
 # ---------- предметы на земле ----------
 
-func add_drop(id: int, key: String, from: Vector3, to: Vector3) -> void:
-	var sp := atlas.make_sprite("prod_" + key)
+func add_drop(id: int, item: String, from: Vector3, to: Vector3) -> void:
+	var sp := atlas.make_sprite(Farm.item_info(item)["icon"])
 	sp.offset = Vector2(0, 8)
 	sp.pixel_size = 0.7 / T
 	sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	sp.modulate = _tint
 	sp.position = from
 	content.add_child(sp)
-	_drops[id] = {"node": sp, "from": from, "to": to, "t": 0.0 if from != to else 1.0, "key": key}
+	_drops[id] = {"node": sp, "from": from, "to": to, "t": 0.0 if from != to else 1.0, "item": item}
 
 
 func remove_drop(id: int) -> void:
@@ -163,11 +163,11 @@ func remove_drop(id: int) -> void:
 
 
 ## Предметы тянутся к игроку, если он ближе полутора клеток. Возвращает id тех, что долетели до него.
-func pull_drops(player: Vector3, delta: float) -> Array:
+func pull_drops(player: Vector3, delta: float, skip: Array) -> Array:
 	var reached := []
 	for id in _drops:
 		var d: Dictionary = _drops[id]
-		if d["t"] < 1.0:
+		if d["t"] < 1.0 or id in skip:
 			continue
 		var pos: Vector3 = d["to"]
 		var to := Vector3(player.x, 0, player.z) - pos
@@ -177,6 +177,13 @@ func pull_drops(player: Vector3, delta: float) -> Array:
 		elif dist < 1.5:
 			d["to"] = pos + to.normalized() * minf(dist, (4.0 + (1.5 - dist) * 6.0) * delta)
 	return reached
+
+
+func drop_distance(id: int, player: Vector3) -> float:
+	if not _drops.has(id):
+		return INF
+	var p: Vector3 = _drops[id]["to"]
+	return Vector2(p.x - player.x, p.z - player.z).length()
 
 
 func tick(delta: float) -> void:

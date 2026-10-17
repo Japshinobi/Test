@@ -517,6 +517,8 @@ func join_game(ip: String) -> void:
 
 
 func leave_game() -> void:
+	if net_mode() == "client":
+		farmnet.on_lost_host()
 	multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	_clear_remotes()
@@ -560,6 +562,7 @@ func _on_connection_failed() -> void:
 
 
 func _on_server_disconnected() -> void:
+	farmnet.on_lost_host()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	_clear_remotes()
 	me.set_look(false, "Тёма")

@@ -21,17 +21,29 @@ const CROPS := [
 ]
 const SEASON_RU := {"spring": "весна", "summer": "лето", "autumn": "осень", "winter": "зима"}
 const CAN_CAP := 10
+## Инвентарь: 20 ячеек (два ряда панели по 10). Третий ряд откроется, когда появятся предметы-расширения.
+const INV_SIZE := 20
+const ROW := 10
+const ROWS := 3
+const STACK := 99
+const TOOLS := {
+	"hoe": {"name": "Мотыга", "icon": "icon_hoe"},
+	"can": {"name": "Лейка", "icon": "icon_can"},
+	"axe": {"name": "Топор", "icon": "icon_axe"},
+	"pick": {"name": "Кирка", "icon": "icon_pick"},
+}
 
 var day := 1
 var money := 100
-var seeds := {}       # культура -> сколько семян
-var produce := {}     # культура -> сколько урожая в инвентаре
+## Инвентарь у каждого свой: id игрока -> массив ячеек; ячейка — null или {"id": "seed:radish", "n": 6}.
+## Предметы: "tool:hoe", "tool:can", "tool:axe", "tool:pick", "seed:<культура>", "prod:<культура>".
+var inv := {}
 var shipped := {}     # культура -> сколько лежит в ящике для продажи (оплата утром)
 ## Грядки: "x,y" -> {tilled, watered, crop, age, ripe, grown, dead}
 var plots := {}
 ## Лейка у каждого своя: id игрока -> литров воды
 var water := {}
-## Предметы на земле: id -> {key, x, z}
+## Предметы на земле: id -> {item, n, x, z}
 var drops := {}
 var next_drop := 1
 var snow := false
@@ -39,11 +51,102 @@ var snow := false
 
 func _init() -> void:
 	for c in CROPS:
-		seeds[c["key"]] = 0
-		produce[c["key"]] = 0
 		shipped[c["key"]] = 0
-	seeds["radish"] = 6
-	seeds["potato"] = 3
+
+
+# ---------- предметы и инвентарь ----------
+
+## Название, картинка и сколько штук помещается в ячейку.
+static func item_info(id: String) -> Dictionary:
+	var kind := id.get_slice(":", 0)
+	var key := id.get_slice(":", 1)
+	match kind:
+		"tool":
+			var t: Dictionary = TOOLS.get(key, {"name": key, "icon": "icon_hoe"})
+			return {"name": t["name"], "icon": t["icon"], "stack": 1, "edible": false}
+		"seed":
+			return {"name": crop(key).get("seed_name", key), "icon": "seed_" + key, "stack": STACK, "edible": false}
+		"prod":
+			return {"name": crop(key).get("product", key), "icon": "prod_" + key, "stack": STACK, "edible": false}
+	return {"name": id, "icon": "icon_hoe", "stack": 1, "edible": false}
+
+
+## Стартовый набор каждого игрока.
+static func new_inventory() -> Array:
+	var a := []
+	a.resize(INV_SIZE)
+	var start := [["tool:hoe", 1], ["tool:can", 1], ["tool:axe", 1], ["tool:pick", 1], ["seed:radish", 6], ["seed:potato", 3]]
+	for i in start.size():
+		a[i] = {"id": start[i][0], "n": start[i][1]}
+	return a
+
+
+func inv_of(peer: int) -> Array:
+	if not inv.has(peer):
+		inv[peer] = new_inventory()
+	return inv[peer]
+
+
+## Положить предметы в инвентарь: сначала в стопки того же предмета, потом в пустые ячейки.
+## Возвращает, сколько не поместилось.
+func add_item(peer: int, id: String, n: int) -> int:
+	var a := inv_of(peer)
+	var cap: int = item_info(id)["stack"]
+	for i in a.size():
+		if n <= 0:
+			break
+		if a[i] != null and a[i]["id"] == id and a[i]["n"] < cap:
+			var put := mini(n, cap - a[i]["n"])
+			a[i]["n"] += put
+			n -= put
+	for i in a.size():
+		if n <= 0:
+			break
+		if a[i] == null:
+			var put := mini(n, cap)
+			a[i] = {"id": id, "n": put}
+			n -= put
+	return n
+
+
+## Сколько таких предметов у игрока.
+func count(peer: int, id: String) -> int:
+	var total := 0
+	for s in inv_of(peer):
+		if s != null and s["id"] == id:
+			total += s["n"]
+	return total
+
+
+## Забрать n штук из ячейки (0 — всё). Возвращает, что забрали: {id, n} или null.
+func take(peer: int, slot: int, n: int) -> Variant:
+	var a := inv_of(peer)
+	if slot < 0 or slot >= a.size() or a[slot] == null:
+		return null
+	var s: Dictionary = a[slot]
+	var k: int = s["n"] if n <= 0 else mini(n, s["n"])
+	s["n"] -= k
+	if s["n"] <= 0:
+		a[slot] = null
+	return {"id": s["id"], "n": k}
+
+
+## Поменять местами две ячейки (или сложить одинаковые в одну стопку).
+func move(peer: int, from: int, to: int) -> void:
+	var a := inv_of(peer)
+	if from == to or from < 0 or to < 0 or from >= a.size() or to >= a.size():
+		return
+	var s: Variant = a[from]
+	var d: Variant = a[to]
+	if s != null and d != null and s["id"] == d["id"]:
+		var cap: int = item_info(s["id"])["stack"]
+		var put := mini(s["n"], cap - d["n"])
+		d["n"] += put
+		s["n"] -= put
+		a[from] = s if s["n"] > 0 else null
+		return
+	a[from] = d
+	a[to] = s
 
 
 static func crop(key: String) -> Dictionary:
@@ -114,7 +217,11 @@ static func farmable(map: Location, x: int, y: int) -> bool:
 
 ## Действие инструментом по клетке. Возвращает {msg} для игрока и что изменилось:
 ## {plot: true} — грядка, {inv: true} — семена и деньги, {water: true} — лейка, {harvest: [key, n]} — что выпало.
-func use(map: Location, peer: int, x: int, y: int, tool: String, crop_key: String) -> Dictionary:
+func use(map: Location, peer: int, x: int, y: int, slot: int) -> Dictionary:
+	var held: Variant = inv_of(peer)[slot] if slot >= 0 and slot < inv_of(peer).size() else null
+	var held_id: String = held["id"] if held != null else ""
+	var tool := held_id.get_slice(":", 1) if held_id.begins_with("tool:") else ("seed" if held_id.begins_with("seed:") else "")
+	var crop_key := held_id.get_slice(":", 1)
 	var p: Variant = plot_at(x, y)
 	var season := Location.season_id(day)
 	if p == null and not farmable(map, x, y):
@@ -135,6 +242,10 @@ func use(map: Location, peer: int, x: int, y: int, tool: String, crop_key: Strin
 		var key: String = p["crop"]
 		var n := harvest(p)
 		return {"plot": true, "harvest": [key, n]}
+	if tool == "axe" or tool == "pick":
+		return {"msg": "Топор и кирка заработают на шаге с инструментами."}
+	if tool == "":
+		return {}
 	if season == "winter" and tool != "can":
 		return {"msg": "Зимой земля промёрзла. Огород отдыхает до весны."}
 	match tool:
@@ -163,11 +274,11 @@ func use(map: Location, peer: int, x: int, y: int, tool: String, crop_key: Strin
 				return {"msg": "Сначала вскопайте землю мотыгой."}
 			if p["crop"] != "":
 				return {"msg": "Тут уже растёт: %s." % crop(p["crop"])["name"].to_lower()}
-			if seeds.get(crop_key, 0) <= 0:
+			if held == null or held["n"] <= 0:
 				return {"msg": "Закончилось: %s. Купите на рынке." % d["seed_name"].to_lower()}
 			if not can_plant(crop_key, season):
 				return {"msg": "%s: сажают в сезон «%s». Сейчас %s." % [d["name"], seasons_ru(d.get("plant", d["seasons"])), SEASON_RU[season]]}
-			seeds[crop_key] -= 1
+			take(peer, slot, 1)
 			p["crop"] = crop_key
 			p["age"] = 0.0
 			p["ripe"] = false
@@ -256,35 +367,41 @@ static func _add(d: Dictionary, k: String) -> void:
 	d[k] = d.get(k, 0) + 1
 
 
-## Положить урожай в ящик для продажи: key — культура, "" — всё сразу; n — сколько (0 — всё).
-func ship(key: String, n: int) -> void:
-	for c in CROPS:
-		var k: String = c["key"]
+## Положить урожай игрока в ящик для продажи: key — культура ("" — весь урожай), n — сколько (0 — всё).
+func ship(peer: int, key: String, n: int) -> void:
+	var a := inv_of(peer)
+	for i in a.size():
+		var s: Variant = a[i]
+		if s == null or not String(s["id"]).begins_with("prod:"):
+			continue
+		var k := String(s["id"]).get_slice(":", 1)
 		if key != "" and k != key:
 			continue
-		var take: int = produce[k] if n <= 0 else mini(n, produce[k])
-		produce[k] -= take
-		shipped[k] += take
+		var t: int = s["n"] if n <= 0 else mini(n, s["n"])
+		take(peer, i, t)
+		shipped[k] += t
+		if n > 0:
+			n -= t
+			if n <= 0:
+				return
 
 
-func add_drop(key: String, x: float, z: float) -> int:
+func add_drop(item: String, n: int, x: float, z: float) -> int:
 	var id := next_drop
 	next_drop += 1
-	drops[id] = {"key": key, "x": x, "z": z}
+	drops[id] = {"item": item, "n": n, "x": x, "z": z}
 	return id
 
 
 ## Всё состояние одним словарём: для отправки по сети (и для сохранения игры потом).
 func to_dict() -> Dictionary:
-	return {"day": day, "money": money, "seeds": seeds, "produce": produce, "shipped": shipped,
+	return {"day": day, "money": money, "shipped": shipped,
 		"plots": plots, "drops": drops, "next_drop": next_drop, "snow": snow}
 
 
 func from_dict(d: Dictionary) -> void:
 	day = int(d["day"])
 	money = int(d["money"])
-	seeds = d["seeds"]
-	produce = d["produce"]
 	shipped = d["shipped"]
 	plots = d["plots"]
 	drops = {}
