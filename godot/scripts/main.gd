@@ -7,6 +7,7 @@ const Atlas := preload("res://scripts/atlas.gd")
 const World := preload("res://scripts/world.gd")
 const Avatar := preload("res://scripts/avatar.gd")
 const Hud := preload("res://scripts/hud.gd")
+const FarmNet := preload("res://scripts/farm_net.gd")
 
 const PORT := 24565
 const SPEED := 3.6          # клеток в секунду
@@ -21,6 +22,7 @@ var atlas: Atlas
 var map: Location
 var world: World
 var hud: Hud
+var farmnet: FarmNet
 var cam: Camera3D
 var sun: DirectionalLight3D
 var env: Environment
@@ -29,6 +31,8 @@ var me: Avatar
 var remotes := {}            # id игрока в сети -> Avatar
 var astar := AStarGrid2D.new()
 var path: Array[Vector3] = []
+## Клетка, с которой надо что-то сделать, когда дойдём до неё.
+var pending_act: Variant = null
 
 var day := 1
 var minutes := 7.0 * 60.0
@@ -58,11 +62,14 @@ func _ready() -> void:
 	_make_cursor()
 	_make_astar()
 
+	farmnet = FarmNet.new()
+	farmnet.setup(self)
+	add_child(farmnet)
+
 	me = Avatar.new()
 	add_child(me)
 	me.setup(atlas, false, "Тёма")
-	var spawn: Variant = map.find("spawn")
-	me.position = Vector3(spawn["x"] + 0.5, 0, spawn["y"] + 0.6) if spawn != null else Vector3(map.W / 2.0, 0, map.H / 2.0)
+	me.position = spawn_point()
 	cam_target = me.position
 
 	cam = Camera3D.new()
@@ -72,7 +79,7 @@ func _ready() -> void:
 	add_child(cam)
 	cam.make_current()
 
-	world.build(day)
+	world.build(day, farmnet.farm)
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
@@ -90,10 +97,15 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	minutes += delta * GAME_MIN_PER_SEC * time_speed()
 	if minutes >= 24.0 * 60.0:
-		minutes = 6.0 * 60.0
-		if net_mode() != "client":
-			_set_day(day + 1)
-	_move(delta)
+		# в полночь день кончается сам; новый день объявляет хозяин игры
+		minutes = 24.0 * 60.0 - 0.01
+		if farmnet.is_host():
+			farmnet.end_day("Наступила полночь — все уснули прямо там, где были.")
+	if hud.is_busy():
+		me.moving = false
+	else:
+		_move(delta)
+	farmnet.tick(delta)
 	me.tick(delta, yaw)
 	for r in remotes.values():
 		r.tick(delta, yaw)
@@ -120,17 +132,36 @@ func toggle_fast() -> void:
 	fast = not fast
 
 
-func shift_day(d: int) -> void:
-	if net_mode() == "client":
-		return
-	_set_day(maxi(1, day + d))
-	_send_clock()
+## Кнопка «+ день» для проверки: ночь проходит сразу, растения растут.
+func skip_day() -> void:
+	if farmnet.is_host():
+		farmnet.end_day("")
 
 
-func _set_day(d: int) -> void:
+func set_day(d: int) -> void:
 	day = d
-	world.build(day)
+	world.build(day, farmnet.farm)
 	_update_light(true)
+
+
+## Утро: все просыпаются у дома, растения подросли, ящик заплатил.
+func on_new_day(morning: Dictionary, note: String) -> void:
+	minutes = 6.0 * 60.0
+	set_day(farmnet.farm.day)
+	path.clear()
+	pending_act = null
+	me.position = spawn_point()
+	me.face = 0.0
+	cam_target = me.position
+	hud.show_morning(morning, note)
+
+
+## Где игрок появляется утром: метка «Старт игрока» на карте.
+func spawn_point() -> Vector3:
+	var spawn: Variant = map.find("spawn")
+	if spawn == null:
+		return Vector3(map.W / 2.0, 0, map.H / 2.0)
+	return Vector3(spawn["x"] + 0.5, 0, spawn["y"] + 0.6)
 
 
 ## Цвет дневного света по времени суток (тот же, что в браузерной версии).
@@ -254,7 +285,7 @@ func _unhandled_input(e: InputEvent) -> void:
 				_press_pos = e.position
 			else:
 				if _pressing and not _dragging and e.button_index == MOUSE_BUTTON_LEFT:
-					_walk_to_screen(e.position)
+					_tap(e.position)
 				_pressing = false
 	elif e is InputEventMouseMotion:
 		_update_cursor(e.position)
@@ -265,6 +296,15 @@ func _unhandled_input(e: InputEvent) -> void:
 				yaw -= e.relative.x * 0.008
 	elif e is InputEventMagnifyGesture and _touches.size() < 2:
 		_zoom(1.0 / e.factor)
+	elif e is InputEventKey and e.pressed and not e.echo and not _typing() and not hud.is_busy():
+		if e.keycode == KEY_SPACE:
+			_act_front()
+		elif e.keycode >= KEY_1 and e.keycode <= KEY_9:
+			hud.select_slot(e.keycode - KEY_1)
+		elif e.keycode == KEY_0:
+			hud.select_slot(9)
+		elif e.keycode == KEY_I or e.keycode == KEY_TAB:
+			hud.open_inventory()
 
 
 func _ground_point(screen: Vector2) -> Variant:
@@ -275,19 +315,70 @@ func _ground_point(screen: Vector2) -> Variant:
 	return o + n * (-o.y / n.y)
 
 
-func _walk_to_screen(screen: Vector2) -> void:
+## Тап или клик по земле. Если там есть что сделать (грядка, колодец, ящик…), подходим и делаем;
+## иначе просто идём туда.
+func _tap(screen: Vector2) -> void:
+	if hud.is_busy():
+		return
 	var p: Variant = _ground_point(screen)
 	if p == null:
 		return
-	var to := Vector2i(floori(p.x), floori(p.z))
-	if not map.walkable(to.x, to.y):
+	var cell := Vector2i(floori(p.x), floori(p.z))
+	var from := my_cell()
+	pending_act = null
+	if farmnet.is_target(cell):
+		if cell == from or (absi(cell.x - from.x) + absi(cell.y - from.y) == 1):
+			path.clear()
+			_do_act(cell)
+			return
+		# ближайшая свободная клетка рядом с целью
+		var best: Array[Vector2i] = []
+		for n in [cell + Vector2i.UP, cell + Vector2i.DOWN, cell + Vector2i.LEFT, cell + Vector2i.RIGHT]:
+			if not map.walkable(n.x, n.y):
+				continue
+			var cells := astar.get_id_path(from, n)
+			if not cells.is_empty() and (best.is_empty() or cells.size() < best.size()):
+				best = cells
+		if best.is_empty():
+			hud.toast("Туда не подойти.")
+			return
+		_follow(best, null)
+		pending_act = cell
 		return
-	var from := Vector2i(floori(me.position.x), floori(me.position.z))
-	var cells := astar.get_id_path(from, to)
+	if not map.walkable(cell.x, cell.y):
+		return
+	_follow(astar.get_id_path(from, cell), Vector3(p.x, 0, p.z))
+
+
+func _follow(cells: Array[Vector2i], end: Variant) -> void:
 	path.clear()
 	for i in range(1, cells.size()):
 		path.append(Vector3(cells[i].x + 0.5, 0, cells[i].y + 0.5))
-	path.append(Vector3(p.x, 0, p.z))
+	if end != null:
+		path.append(end)
+	elif cells.size() == 1:
+		path.append(Vector3(cells[0].x + 0.5, 0, cells[0].y + 0.5))
+
+
+func my_cell() -> Vector2i:
+	return Vector2i(floori(me.position.x), floori(me.position.z))
+
+
+## Повернуться к клетке и сделать с ней то, что в руках.
+func _do_act(cell: Vector2i) -> void:
+	var d := Vector3(cell.x + 0.5, 0, cell.y + 0.5) - me.position
+	if Vector2(d.x, d.z).length() > 0.05:
+		me.face = atan2(d.x, d.z)
+	farmnet.act(cell)
+
+
+## Пробел: действие с клеткой, к которой Тёма повёрнут лицом.
+func _act_front() -> void:
+	var d := Vector2(sin(me.face), cos(me.face))
+	var step := Vector2i(signi(roundi(d.x)) if absf(d.x) > absf(d.y) else 0, 0 if absf(d.x) > absf(d.y) else signi(roundi(d.y)))
+	if step == Vector2i.ZERO:
+		step = Vector2i(0, 1)
+	_do_act(my_cell() + step)
 
 
 func _move(delta: float) -> void:
@@ -304,6 +395,7 @@ func _move(delta: float) -> void:
 			v.y -= 1
 		if v != Vector2.ZERO:
 			path.clear()
+			pending_act = null
 			# «вперёд» — от камеры, как в играх с вращающейся камерой
 			var fwd := Vector3(-sin(yaw), 0, -cos(yaw))
 			var right := Vector3(cos(yaw), 0, -sin(yaw))
@@ -316,6 +408,10 @@ func _move(delta: float) -> void:
 			me.position = Vector3(path[0].x, 0, path[0].z)
 			path.remove_at(0)
 			me.moving = not path.is_empty()
+			if path.is_empty() and pending_act != null:
+				var cell: Vector2i = pending_act
+				pending_act = null
+				_do_act(cell)
 			return
 		dir = to.normalized()
 	if dir == Vector3.ZERO:
@@ -334,6 +430,7 @@ func _move(delta: float) -> void:
 	me.position = p
 	if not moved:
 		path.clear()
+		pending_act = null
 		me.moving = false
 
 
@@ -438,12 +535,13 @@ func _local_addresses() -> PackedStringArray:
 
 
 func _on_peer_connected(id: int) -> void:
+	farmnet.on_peer_connected(id)
 	if multiplayer.is_server():
 		net_status = "Друг подключился! Адрес игры: " + ", ".join(_local_addresses())
-		net_clock.rpc_id(id, day, minutes)
 
 
 func _on_peer_disconnected(id: int) -> void:
+	farmnet.on_peer_disconnected(id)
 	if remotes.has(id):
 		remotes[id].queue_free()
 		remotes.erase(id)
@@ -511,7 +609,6 @@ func net_state(pos: Vector3, p_face: float, p_moving: bool) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func net_clock(p_day: int, p_minutes: float) -> void:
+func net_clock(_p_day: int, p_minutes: float) -> void:
+	# день меняет только утро от хозяина (вместе с огородом), здесь — лишь часы
 	minutes = p_minutes
-	if p_day != day:
-		_set_day(p_day)

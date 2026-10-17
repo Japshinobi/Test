@@ -5,6 +5,7 @@ extends Node3D
 
 const Location := preload("res://scripts/location.gd")
 const Atlas := preload("res://scripts/atlas.gd")
+const Farm := preload("res://scripts/farm.gd")
 
 const T := 16
 ## Камера смотрит сверху под углом, и стоячие спрайты кажутся приплюснутыми. Немного вытягиваем их вверх.
@@ -21,6 +22,10 @@ var water_frames: Array[ImageTexture] = []
 var _water_t := 0.0
 var _water_frame := 0
 var _tint := Color.WHITE
+var _look := "summer"
+var _flowers := {}        # клетка -> спрайт цветов (убирается, когда клетку вскопали)
+var _plots := {}          # клетка -> узел грядки
+var _drops := {}          # id -> {node, from, to, t, key}
 
 
 func setup(p_atlas: Atlas, p_map: Location) -> void:
@@ -30,15 +35,19 @@ func setup(p_atlas: Atlas, p_map: Location) -> void:
 
 
 ## Пересобрать карту на день: земля, вода и спрайты зависят от времени года.
-func build(day: int) -> void:
+func build(day: int, farm: Farm) -> void:
 	if content:
 		content.free()
 	content = Node3D.new()
 	content.name = "Map"
 	add_child(content)
 	sprites.clear()
+	_flowers.clear()
+	_plots.clear()
+	_drops.clear()
 	var snow := Location.snow_cover(day)
 	var look := Location.look_name(day, snow)
+	_look = look
 	var season := Location.season_id(day)
 	_ground(look, snow)
 	_water(season == "winter")
@@ -64,8 +73,14 @@ func build(day: int) -> void:
 		var flowers := "bloom" if season == "spring" else ("some" if season == "summer" else "wither")
 		for y in map.H:
 			for x in map.W:
-				if map.ground_at(x, y) == "," and map.object_at(x, y) == null:
-					_obj("flower_%s_%d" % [flowers, int(Location.hash3(x, y, 31) * 8)], Vector3(x + 0.5, 0, y + 0.5), false)
+				if map.ground_at(x, y) == "," and map.object_at(x, y) == null and farm.plot_at(x, y) == null:
+					_flowers[Vector2i(x, y)] = _obj("flower_%s_%d" % [flowers, int(Location.hash3(x, y, 31) * 8)], Vector3(x + 0.5, 0, y + 0.5), false)
+	for key in farm.plots:
+		var xy: PackedStringArray = key.split(",")
+		sync_plot(int(xy[0]), int(xy[1]), farm.plots[key])
+	for id in farm.drops:
+		var d: Dictionary = farm.drops[id]
+		add_drop(id, d["key"], Vector3(d["x"], 0, d["z"]), Vector3(d["x"], 0, d["z"]))
 	set_tint(_tint)
 
 
@@ -74,9 +89,108 @@ func set_tint(c: Color) -> void:
 	_tint = c
 	for sp in sprites:
 		sp.modulate = c
+	for n in _plots.values():
+		for ch in n.get_children():
+			if ch is Sprite3D and ch.billboard != BaseMaterial3D.BILLBOARD_DISABLED:
+				ch.modulate = c
+	for d in _drops.values():
+		d["node"].modulate = c
+
+
+# ---------- грядки ----------
+
+## Показать грядку так, как она сейчас: вскопанная (или политая) земля и растение на ней.
+func sync_plot(x: int, y: int, p: Variant) -> void:
+	var cell := Vector2i(x, y)
+	if _plots.has(cell):
+		_plots[cell].free()
+		_plots.erase(cell)
+	if _flowers.has(cell):
+		var f: Sprite3D = _flowers[cell]
+		sprites.erase(f)
+		f.free()
+		_flowers.erase(cell)
+	if p == null:
+		return
+	var node := Node3D.new()
+	node.position = Vector3(x + 0.5, 0, y + 0.5)
+	content.add_child(node)
+	_plots[cell] = node
+	# земля лежит на земле: плоский спрайт, освещается солнцем как сама земля
+	var soil := atlas.make_sprite("soilwet" if p["watered"] else "soil")
+	soil.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	soil.axis = Vector3.AXIS_Y
+	soil.centered = true
+	soil.offset = Vector2.ZERO
+	soil.shaded = true
+	soil.position.y = 0.015
+	soil.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.add_child(soil)
+	if p["crop"] != "":
+		var name: String
+		if p["dead"]:
+			name = "dead"
+		elif Farm.crop(p["crop"]).get("tree", false):
+			name = "crop_%s_%d_%s" % [p["crop"], Farm.stage(p), _look]
+		else:
+			name = "crop_%s_%d" % [p["crop"], Farm.stage(p)]
+		if atlas.has(name):
+			var sp := atlas.make_sprite(name)
+			sp.scale = Vector3(1, STRETCH, 1)
+			# у растений якорь внизу картинки, а сам кустик нарисован в её нижних 16 пикселях
+			sp.position.z = 0.0
+			sp.modulate = _tint
+			node.add_child(sp)
+
+
+# ---------- предметы на земле ----------
+
+func add_drop(id: int, key: String, from: Vector3, to: Vector3) -> void:
+	var sp := atlas.make_sprite("prod_" + key)
+	sp.offset = Vector2(0, 8)
+	sp.pixel_size = 0.7 / T
+	sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sp.modulate = _tint
+	sp.position = from
+	content.add_child(sp)
+	_drops[id] = {"node": sp, "from": from, "to": to, "t": 0.0 if from != to else 1.0, "key": key}
+
+
+func remove_drop(id: int) -> void:
+	if _drops.has(id):
+		_drops[id]["node"].free()
+		_drops.erase(id)
+
+
+## Предметы тянутся к игроку, если он ближе полутора клеток. Возвращает id тех, что долетели до него.
+func pull_drops(player: Vector3, delta: float) -> Array:
+	var reached := []
+	for id in _drops:
+		var d: Dictionary = _drops[id]
+		if d["t"] < 1.0:
+			continue
+		var pos: Vector3 = d["to"]
+		var to := Vector3(player.x, 0, player.z) - pos
+		var dist := to.length()
+		if dist < 0.3:
+			reached.append(id)
+		elif dist < 1.5:
+			d["to"] = pos + to.normalized() * minf(dist, (4.0 + (1.5 - dist) * 6.0) * delta)
+	return reached
 
 
 func tick(delta: float) -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	for id in _drops:
+		var d: Dictionary = _drops[id]
+		var n: Sprite3D = d["node"]
+		if d["t"] < 1.0:
+			# вылетают из грядки дугой
+			d["t"] = minf(1.0, d["t"] + delta / 0.35)
+			var u: float = d["t"]
+			n.position = d["from"].lerp(d["to"], u) + Vector3(0, sin(u * PI) * 0.45, 0)
+		else:
+			n.position = d["to"] + Vector3(0, 0.04 + 0.04 * sin(now * 3.3 + float(id)), 0)
 	if water_frames.size() > 1:
 		_water_t += delta
 		if _water_t > 0.3:
@@ -85,10 +199,10 @@ func tick(delta: float) -> void:
 			water_mat.albedo_texture = water_frames[_water_frame]
 
 
-func _obj(sprite_name: String, pos: Vector3, shadow := true) -> void:
+func _obj(sprite_name: String, pos: Vector3, shadow := true) -> Sprite3D:
 	if not atlas.has(sprite_name):
 		push_warning("Нет спрайта " + sprite_name)
-		return
+		return null
 	var sp := atlas.make_sprite(sprite_name)
 	sp.position = pos
 	sp.scale = Vector3(1, STRETCH, 1)
@@ -96,6 +210,7 @@ func _obj(sprite_name: String, pos: Vector3, shadow := true) -> void:
 		sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	content.add_child(sp)
 	sprites.append(sp)
+	return sp
 
 
 # ---------- земля ----------
