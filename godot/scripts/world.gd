@@ -167,17 +167,24 @@ func _corner(x: int, y: int) -> Array:
 
 ## Земля за краем карты, чтобы вокруг не было пустоты.
 func _outer_ground() -> void:
-	var mesh := PlaneMesh.new()
-	mesh.size = Vector2(400, 400)
+	# Рамка вокруг карты, а не сплошной лист под ней: иначе она закрыла бы низины вроде пруда.
+	const PAD := 200.0
+	var w := float(map.W)
+	var h := float(map.H)
+	var st := _surface()
+	for r in [Rect2(-PAD, -PAD, w + 2 * PAD, PAD), Rect2(-PAD, h, w + 2 * PAD, PAD), Rect2(-PAD, 0, PAD, h), Rect2(w, 0, PAD, h)]:
+		var y := -0.03
+		quad(st, Vector3(r.position.x, y, r.position.y), Vector3(r.end.x, y, r.position.y), Vector3(r.end.x, y, r.end.y), Vector3(r.position.x, y, r.end.y),
+			Rect2(0, 0, 1, 1), Vector3.UP)
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color("#3f6b34")
 	mat.roughness = 1.0
 	mat.metallic_specular = 0.0
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var mi := MeshInstance3D.new()
 	mi.name = "OuterGround"
-	mi.mesh = mesh
+	mi.mesh = st.commit()
 	mi.material_override = mat
-	mi.position = Vector3(map.W / 2.0, -0.03, map.H / 2.0)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 
