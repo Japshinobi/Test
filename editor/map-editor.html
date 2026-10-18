@@ -178,7 +178,7 @@ function parseMap(text) {
   const d = JSON.parse(text);
   const ground = [];
   for (let y = 0; y < d.height; y++) ground.push(Array.from((d.ground[y] || '').padEnd(d.width, '.').slice(0, d.width)));
-  return {id: d.id, name: d.name || d.id, width: d.width, height: d.height, ground, objects: d.objects.map(o => ({...o}))};
+  return {id: d.id, name: d.name || d.id, width: d.width, height: d.height, bounds: d.bounds || null, ground, objects: d.objects.map(o => ({...o}))};
 }
 
 function blankMap(id, name, w, h) {
@@ -189,7 +189,8 @@ function blankMap(id, name, w, h) {
 function mapToText(m) {
   const objs = [...m.objects].sort((a, b) => a.y - b.y || a.x - b.x);
   return '{\n\t"name": ' + JSON.stringify(m.name) + ',\n\t"id": ' + JSON.stringify(m.id) +
-    ',\n\t"width": ' + m.width + ',\n\t"height": ' + m.height + ',\n\t"ground": [\n' +
+    ',\n\t"width": ' + m.width + ',\n\t"height": ' + m.height + ',\n' +
+    (m.bounds ? '\t"bounds": ' + JSON.stringify(m.bounds).replace(/,/g, ', ') + ',\n' : '') + '\t"ground": [\n' +
     m.ground.map(r => '\t\t' + JSON.stringify(r.join(''))).join(',\n') + '\n\t],\n\t"objects": [\n' +
     objs.map(o => '\t\t{' + Object.entries(o).filter(([k]) => k[0] !== '_').map(([k, v]) => JSON.stringify(k) + ': ' + JSON.stringify(v)).join(', ') + '}').join(',\n') + '\n\t]\n}\n';
 }
@@ -234,7 +235,7 @@ function httpSource(base) {
   return {
     canSave: false,
     get: async (path) => { const r = await fetch(base + path); if (!r.ok) throw new Error(path); return r; },
-    list: async (dir) => { try { return await (await fetch(base + dir + '/index.json')).json(); } catch (e) { return ['farm.json']; } },
+    list: async (dir) => { try { return await (await fetch(base + dir + '/index.json')).json(); } catch (e) { return ['farm.json', 'cross.json', 'market.json', 'river.json', 'forest.json']; } },
     save: async (path, text) => { window.__saved = window.__saved || {}; window.__saved[path] = text; },
   };
 }
@@ -259,10 +260,15 @@ if (!window.showDirectoryPicker) $('noFsApi').style.display = 'block';
 // ---------- палитра ----------
 const SEASON = () => $('seasonSel').value;
 
-function spriteName(def) {
+function spriteName(def, o) {
   if (!def.sprite) return null;
-  return def.seasonal ? def.sprite + '_' + SEASON() : def.sprite;
+  if (def.seasonal) return def.sprite + '_' + SEASON();
+  // прилавки и шатёр рисуются с торговцем (открытыми)
+  if (def.shop) { const who = (o && o.trader) || (o ? '' : (def.traders || [''])[0]); return def.sprite + '_' + (who || 'empty') + '_' + (who ? 1 : 0); }
+  return def.sprite;
 }
+// поля летом меняются по дням: в редакторе показываем середину лета
+const fieldLook = () => SEASON() === 'summer' ? 'summer06' : SEASON();
 
 function groundSprite(key, x, y) {
   const v = (x * 7 + y * 13) % 4;
@@ -271,6 +277,17 @@ function groundSprite(key, x, y) {
     case 'P': return 'site_' + v;
     case '~': return 'water_' + ((x + y) % 4) + '_0';
     case '#': return null;
+    case 'Q': case 'q': return 'field_wheat_' + fieldLook() + '_' + v;
+    case 'N': case 'n': return 'field_sun_' + fieldLook() + '_' + v;
+    case 'O': return 'cobbles_' + v;
+    case 'b': return 'bridge_0';
+    case 'd': return 'bridge_1';
+    case 'V': {
+      // канава поворачивает за соседними клетками канавы
+      const g = (a, b) => map && map.ground[b] && map.ground[b][a] === 'V';
+      const m = (g(x - 1, y) ? 1 : 0) | (g(x + 1, y) ? 2 : 0) | (g(x, y - 1) ? 4 : 0) | (g(x, y + 1) ? 8 : 0);
+      return 'ditch_' + m + (SEASON() === 'winter' ? '_ice' : '');
+    }
     default: return 'grass_' + SEASON() + '_' + v;
   }
 }
@@ -536,7 +553,8 @@ function updateHover() {
 }
 
 // ---------- свойства выбранного ----------
-const PROP_NAMES = {text: 'Текст таблички', to: 'Куда ведёт (имя карты латиницей, например market)'};
+const PROP_NAMES = {text: 'Текст (что увидит игрок)', to: 'Куда ведёт (имя карты латиницей, например market)', trader: 'Торговец'};
+const TRADER_NAMES = {'': 'никого (свободное место)', fruit: 'Фруктовщик', veg: 'Овощница', berry: 'Торговка ягодами и грибами', any: 'Универсальный торговец'};
 function showProps() {
   const box = $('props');
   if (!sel) { box.className = 'props hint'; box.textContent = 'Выберите объект инструментом «Выбор».'; return; }
@@ -548,9 +566,11 @@ function showProps() {
   box.appendChild(t);
   for (const p of (def.props || [])) {
     const l = document.createElement('label'); l.textContent = PROP_NAMES[p] || p; box.appendChild(l);
-    const inp = document.createElement(p === 'text' ? 'textarea' : 'input'); inp.value = sel[p] || '';
+    const inp = document.createElement(p === 'text' ? 'textarea' : p === 'trader' ? 'select' : 'input');
+    if (p === 'trader') for (const t of (def.traders || [''])) { const op = document.createElement('option'); op.value = t; op.textContent = TRADER_NAMES[t] || t; inp.appendChild(op); }
+    inp.value = sel[p] || '';
     if (p === 'to') { inp.setAttribute('list', 'mapIds'); }
-    inp.oninput = () => { sel[p] = inp.value; setDirty(true); draw(); };
+    inp.oninput = inp.onchange = () => { sel[p] = inp.value; setDirty(true); draw(); };
     box.appendChild(inp);
   }
   const del = document.createElement('button'); del.textContent = 'Удалить (Delete)'; del.style.marginTop = '12px';
@@ -584,7 +604,7 @@ function blit(name, dx, dy, alpha) {
 // Объект стоит нижней серединой своих клеток — как в игре.
 function drawObject(o, alpha) {
   const def = project.byId[o.id], [w, h] = sizeOf(o.id), s = T * zoom;
-  const name = def && spriteName(def), sp = name && project.sprites[name];
+  const name = def && spriteName(def, o), sp = name && project.sprites[name];
   if (sp) {
     blit(name, o.x * T + (w * T - sp.w) / 2, (o.y + h) * T - sp.ay, alpha);
     return;

@@ -28,6 +28,7 @@ const SLOT := 58
 ## Открытое окно (или null) и его вид: "message", "sleep", "wait", "morning", "ship", "inventory".
 var dialog: PanelContainer
 var dialog_kind := ""
+var fade_rect: ColorRect
 
 
 func setup(p_main: Node) -> void:
@@ -132,14 +133,20 @@ func setup(p_main: Node) -> void:
 
 	# всплывающие сообщения
 	toast_label = _outlined_label(20)
-	toast_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	toast_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	toast_label.position.y = 120
+	toast_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	toast_label.offset_left = 420
+	toast_label.offset_right = -420
+	toast_label.offset_top = 215
 	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	toast_label.custom_minimum_size = Vector2(700, 0)
-	toast_label.position.x -= 350
 	toast_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(toast_label)
+
+	# затемнение при переходе между локациями
+	fade_rect = ColorRect.new()
+	fade_rect.color = Color(0.02, 0.03, 0.09, 0.0)
+	fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(fade_rect)
 	refresh()
 
 
@@ -168,6 +175,10 @@ func refresh() -> void:
 ## Окно открыто — Тёма стоит и ждёт.
 func is_busy() -> bool:
 	return dialog != null
+
+
+func set_fade(a: float) -> void:
+	fade_rect.color.a = clampf(a, 0.0, 1.0)
 
 
 func toast(text: String) -> void:
@@ -274,7 +285,7 @@ func drop_slot(index: int) -> void:
 	var me: Node3D = main.me
 	var f: float = main.me.face
 	var p := me.position + Vector3(sin(f), 0, cos(f)) * 0.9
-	main.farmnet.request("drop", [index, 0, p.x, p.z])
+	main.farmnet.request("drop", [index, 0, p.x, p.z, main.loc_id])
 
 
 func _confirm_erase(index: int) -> void:
@@ -473,6 +484,93 @@ func _fill_ship(v: VBoxContainer) -> void:
 	_button(h, "Закрыть", close_dialog)
 
 
+## Окно торговца на рынке: «Продать» — урожай из своего инвентаря, «Купить» — семена (деньги общие).
+var _trader := ""
+var _trader_tab := "sell"
+
+
+func open_trader(who: String, tab := "") -> void:
+	_trader = who
+	if tab != "":
+		_trader_tab = tab
+	if who == "any":
+		_trader_tab = "buy"
+	var tr: Dictionary = Farm.TRADERS[who]
+	var farm: Farm = main.farmnet.farm
+	var v := _open("trader", tr["name"], 640)
+	_text(v, "Монеты: %d" % farm.money).add_theme_color_override("font_color", Color("#f0cf7a"))
+	if who != "any":
+		var tabs := _buttons(v)
+		for t in [["sell", "Продать"], ["buy", "Купить"]]:
+			var b := _button(tabs, t[1], func() -> void: open_trader(who, t[0]))
+			if t[0] == _trader_tab:
+				b.add_theme_stylebox_override("normal", _box(Color("#4a63a8"), Color("#f0cf7a"), 2))
+	if _trader_tab == "sell":
+		var total := 0
+		var any := false
+		for k in tr["cat"]:
+			var n := 0
+			for it in main.farmnet.my_inv:
+				if it != null and it["id"] == "prod:" + k:
+					n += it["n"]
+			if n <= 0:
+				continue
+			any = true
+			var price := Farm.price(farm.day, k)
+			total += n * price
+			var h := _item_row(v, "prod_" + k, "%s × %d — по %d %s" % [Farm.crop(k)["product"], n, price, _trend_text(farm.day, k)])
+			_button(h, "1", func() -> void: main.farmnet.request("sell", [who, k, 1]))
+			_button(h, "Все за %d" % (n * price), func() -> void: main.farmnet.request("sell", [who, k, 0]))
+		if any:
+			_button(_buttons(v), "Продать всё за %d" % total, func() -> void: main.farmnet.request("sell", [who, "", 0]))
+		else:
+			_text(v, "%s покупает только %s. У вас их сейчас нет." % [tr["name"], tr["what"]])
+	else:
+		var offers := Farm.trader_seeds(who, farm.day)
+		if who == "any":
+			_text(v, ("Семена не по сезону, дороже на 50%%. Этот товар до %d-го дня сезона, потом будет другой." % Farm.universal_offer(farm.day)["until"]) if not offers.is_empty() else "Сегодня нечего предложить.", 15)
+		elif offers.is_empty():
+			_text(v, "Сейчас не сезон для посадки. Загляните к универсальному торговцу: у него бывают семена не по сезону.")
+		for o in offers:
+			var k: String = o[0]
+			var cost: int = o[1]
+			var c := Farm.crop(k)
+			var info := "%s — %d мон. · %s · растёт %d дн." % [c["seed_name"], cost, Farm.seasons_ru(c.get("plant", c["seasons"])), c["grow"]]
+			if c.get("regrow", 0) > 0:
+				info += ", потом урожай каждые %d дн." % c["regrow"]
+			var h := _item_row(v, "seed_" + k, info)
+			var b1 := _button(h, "+1", func() -> void: main.farmnet.request("buy", [who, k, 1]))
+			var b5 := _button(h, "+5 за %d" % (cost * 5), func() -> void: main.farmnet.request("buy", [who, k, 5]))
+			b1.disabled = farm.money < cost
+			b5.disabled = farm.money < cost * 5
+	_button(_buttons(v), "Уйти", close_dialog)
+
+
+func _trend_text(day: int, k: String) -> String:
+	match Farm.trend(day, k):
+		"up":
+			return "(сегодня дорого)"
+		"down":
+			return "(сегодня дёшево)"
+	return ""
+
+
+## Строка списка: картинка, текст и место для кнопок справа.
+func _item_row(v: Control, icon_name: String, text: String) -> HBoxContainer:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 10)
+	v.add_child(h)
+	var icon := TextureRect.new()
+	icon.texture = _icon(icon_name)
+	icon.custom_minimum_size = Vector2(32, 32)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	h.add_child(icon)
+	var l := _text(h, text, 15)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return h
+
+
 func open_inventory() -> void:
 	if is_busy():
 		return
@@ -502,6 +600,8 @@ func _fill_inventory_grid() -> void:
 func refresh_farm() -> void:
 	if dialog_kind == "ship":
 		open_ship()
+	elif dialog_kind == "trader":
+		open_trader(_trader)
 	elif dialog_kind == "inventory":
 		_fill_inventory_grid()
 

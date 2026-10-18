@@ -31,6 +31,11 @@ var me: Avatar
 var remotes := {}            # id игрока в сети -> Avatar
 var astar := AStarGrid2D.new()
 var path: Array[Vector3] = []
+## Где сейчас этот игрок: огород, перекрёсток, рынок, речка, лес.
+var loc_id := "farm"
+## Переход между локациями: куда идём и как далеко зашло затемнение (0..1..0).
+var _travel: Variant = null
+var _fade := 0.0
 ## Клетка, с которой надо что-то сделать, когда дойдём до неё.
 var pending_act: Variant = null
 
@@ -54,7 +59,7 @@ var _pinch := 0.0
 
 func _ready() -> void:
 	atlas = Atlas.new()
-	map = Location.new("farm")
+	map = Location.get_loc(loc_id)
 	world = World.new()
 	add_child(world)
 	world.setup(atlas, map)
@@ -79,7 +84,7 @@ func _ready() -> void:
 	add_child(cam)
 	cam.make_current()
 
-	world.build(day, farmnet.farm)
+	world.build(day, farmnet.farm, map, market_open())
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
@@ -101,7 +106,9 @@ func _process(delta: float) -> void:
 		minutes = 24.0 * 60.0 - 0.01
 		if farmnet.is_host():
 			farmnet.end_day("Наступила полночь — все уснули прямо там, где были.")
-	if hud.is_busy():
+	if _travel != null:
+		_update_travel(delta)
+	elif hud.is_busy():
 		me.moving = false
 	else:
 		_move(delta)
@@ -113,6 +120,7 @@ func _process(delta: float) -> void:
 	_update_camera(delta)
 	_tint_t += delta
 	_update_light(_tint_t > 0.25)
+	world.set_market_open(market_open())
 	world.tick(delta)
 	_net_tick(delta)
 	hud.refresh()
@@ -140,19 +148,82 @@ func skip_day() -> void:
 
 func set_day(d: int) -> void:
 	day = d
-	world.build(day, farmnet.farm)
+	world.build(day, farmnet.farm, map, market_open())
+	_make_astar()
 	_update_light(true)
+
+
+## Звук (заглушка до шага со звуками).
+func sfx(_name: String) -> void:
+	pass
+
+
+## На клетке что-то изменилось (срубили дерево и т. п.): обновить картинку и проходимость.
+func on_map_changed(x: int, y: int) -> void:
+	world.update_cell(x, y)
+	if Rect2i(0, 0, map.W, map.H).has_point(Vector2i(x, y)):
+		astar.set_point_solid(Vector2i(x, y), not map.walkable(x, y))
+
+
+## Рынок открыт с 8:00 до 18:00, кроме последнего дня сезона.
+func market_open() -> bool:
+	return Location.season_day(day) != Location.SEASON_DAYS and minutes >= 480.0 and minutes < 1080.0
+
+
+# ---------- переходы между локациями ----------
+
+## Тёма ступил на выход: экран темнеет, и он оказывается в соседней локации.
+func _start_travel(to: String) -> void:
+	if not Location.exists(to):
+		hud.toast("Эта дорога пока никуда не ведёт.")
+		return
+	_travel = to
+	_fade = 0.0
+	path.clear()
+	pending_act = null
+	me.moving = false
+
+
+func _update_travel(delta: float) -> void:
+	var before := _fade
+	_fade += delta * 4.0
+	if before < 1.0 and _fade >= 1.0:
+		enter_location(String(_travel), loc_id)
+	if _fade >= 2.0:
+		_fade = 0.0
+		_travel = null
+	hud.set_fade(1.0 - absf(_fade - 1.0) if _travel != null else 0.0)
+
+
+## Перейти в локацию id (from — откуда пришли: встанем у выхода оттуда). Без from — на «Старт игрока».
+func enter_location(id: String, from: String = "") -> void:
+	loc_id = id
+	map = Location.get_loc(id)
+	map.season = Location.season_id(day)
+	world.build(day, farmnet.farm, map, market_open())
+	_make_astar()
+	if from != "":
+		var c := map.arrival(from)
+		me.position = Vector3(c.x + 0.5, 0, c.y + 0.5)
+	else:
+		me.position = spawn_point()
+	cam_target = me.position
+	path.clear()
+	pending_act = null
+	_update_light(true)
+	_refresh_remotes()
+	hud.toast(map.title)
 
 
 ## Утро: все просыпаются у дома, растения подросли, ящик заплатил.
 func on_new_day(morning: Dictionary, note: String) -> void:
 	minutes = 6.0 * 60.0
-	set_day(farmnet.farm.day)
-	path.clear()
-	pending_act = null
-	me.position = spawn_point()
+	day = farmnet.farm.day
+	# утром все просыпаются дома
+	_travel = null
+	hud.set_fade(0.0)
+	enter_location("farm")
 	me.face = 0.0
-	cam_target = me.position
 	hud.show_morning(morning, note)
 
 
@@ -428,6 +499,10 @@ func _move(delta: float) -> void:
 		p.z += dir.z * step
 		moved = true
 	me.position = p
+	var ex: Variant = map.exit_at(floori(p.x), floori(p.z))
+	if ex != null and moved:
+		_start_travel(String(ex.get("to", "")))
+		return
 	if not moved:
 		path.clear()
 		pending_act = null
@@ -581,7 +656,7 @@ func _net_tick(delta: float) -> void:
 	_net_t += delta
 	if _net_t >= 0.05:
 		_net_t = 0.0
-		net_state.rpc(me.position, me.face, me.moving)
+		net_state.rpc(me.position, me.face, me.moving, loc_id)
 	if multiplayer.is_server():
 		_clock_t += delta
 		if _clock_t >= 1.0:
@@ -595,7 +670,7 @@ func _send_clock() -> void:
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
-func net_state(pos: Vector3, p_face: float, p_moving: bool) -> void:
+func net_state(pos: Vector3, p_face: float, p_moving: bool, p_loc: String) -> void:
 	var id := multiplayer.get_remote_sender_id()
 	if not remotes.has(id):
 		var a := Avatar.new()
@@ -606,9 +681,19 @@ func net_state(pos: Vector3, p_face: float, p_moving: bool) -> void:
 		a.set_tint(tint_at(minutes))
 		remotes[id] = a
 	var r: Avatar = remotes[id]
+	if r.get_meta("loc", "") != p_loc:
+		r.position = pos     # пришёл из другой локации — не тянем через всю карту
+	r.set_meta("loc", p_loc)
+	r.visible = p_loc == loc_id
 	r.net_pos = pos
 	r.face = p_face
 	r.moving = p_moving
+
+
+## Других игроков видно, только если они в той же локации.
+func _refresh_remotes() -> void:
+	for r in remotes.values():
+		r.visible = r.get_meta("loc", "") == loc_id
 
 
 @rpc("authority", "call_remote", "reliable")

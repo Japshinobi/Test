@@ -31,7 +31,9 @@ const TOOLS := {
 	"can": {"name": "Лейка", "icon": "icon_can"},
 	"axe": {"name": "Топор", "icon": "icon_axe"},
 	"pick": {"name": "Кирка", "icon": "icon_pick"},
+	"scythe": {"name": "Коса", "icon": "icon_scythe"},
 }
+const RES := {"wood": {"name": "Дрова", "icon": "icon_wood"}, "stone": {"name": "Камень", "icon": "icon_stone"}}
 
 var day := 1
 var money := 100
@@ -47,6 +49,8 @@ var water := {}
 var drops := {}
 var next_drop := 1
 var snow := false
+## Изменения карт по локациям: что срубили, разбили, скосили. "farm" -> {"x,y": изменение}
+var mods := {}
 
 
 func _init() -> void:
@@ -68,6 +72,9 @@ static func item_info(id: String) -> Dictionary:
 			return {"name": crop(key).get("seed_name", key), "icon": "seed_" + key, "stack": STACK, "edible": false}
 		"prod":
 			return {"name": crop(key).get("product", key), "icon": "prod_" + key, "stack": STACK, "edible": false}
+		"res":
+			var r: Dictionary = RES.get(key, {"name": key, "icon": "icon_wood"})
+			return {"name": r["name"], "icon": r["icon"], "stack": STACK, "edible": false}
 	return {"name": id, "icon": "icon_hoe", "stack": 1, "edible": false}
 
 
@@ -75,7 +82,7 @@ static func item_info(id: String) -> Dictionary:
 static func new_inventory() -> Array:
 	var a := []
 	a.resize(INV_SIZE)
-	var start := [["tool:hoe", 1], ["tool:can", 1], ["tool:axe", 1], ["tool:pick", 1], ["seed:radish", 6], ["seed:potato", 3]]
+	var start := [["tool:hoe", 1], ["tool:can", 1], ["tool:axe", 1], ["tool:pick", 1], ["tool:scythe", 1], ["seed:radish", 6], ["seed:potato", 3]]
 	for i in start.size():
 		a[i] = {"id": start[i][0], "n": start[i][1]}
 	return a
@@ -218,6 +225,11 @@ static func farmable(map: Location, x: int, y: int) -> bool:
 ## Действие инструментом по клетке. Возвращает {msg} для игрока и что изменилось:
 ## {plot: true} — грядка, {inv: true} — семена и деньги, {water: true} — лейка, {harvest: [key, n]} — что выпало.
 func use(map: Location, peer: int, x: int, y: int, slot: int) -> Dictionary:
+	if map.id != "farm":
+		var g0 := map.ground_at(x, y)
+		if g0 == "." or g0 == "," or g0 == "=":
+			return {"msg": "Копать можно только у себя на огороде."}
+		return {}
 	var held: Variant = inv_of(peer)[slot] if slot >= 0 and slot < inv_of(peer).size() else null
 	var held_id: String = held["id"] if held != null else ""
 	var tool := held_id.get_slice(":", 1) if held_id.begins_with("tool:") else ("seed" if held_id.begins_with("seed:") else "")
@@ -242,8 +254,8 @@ func use(map: Location, peer: int, x: int, y: int, slot: int) -> Dictionary:
 		var key: String = p["crop"]
 		var n := harvest(p)
 		return {"plot": true, "harvest": [key, n]}
-	if tool == "axe" or tool == "pick":
-		return {"msg": "Топор и кирка заработают на шаге с инструментами."}
+	if tool == "axe" or tool == "pick" or tool == "scythe":
+		return {}
 	if tool == "":
 		return {}
 	if season == "winter" and tool != "can":
@@ -367,6 +379,98 @@ static func _add(d: Dictionary, k: String) -> void:
 	d[k] = d.get(k, 0) + 1
 
 
+# ---------- рынок ----------
+# Каждый торговец покупает только свой товар по рыночной цене и продаёт семена своего товара в сезон.
+# Универсальный торговец продаёт три вида семян не по сезону на 50% дороже; выбор меняется в 1-й и 6-й день сезона.
+const TRADERS := {
+	"fruit": {"name": "Фруктовщик", "what": "фрукты", "cat": ["apple"]},
+	"veg": {"name": "Овощница", "what": "овощи", "cat": ["radish", "peas", "potato", "carrot", "cucumber", "tomato", "corn", "pumpkin"]},
+	"berry": {"name": "Торговка ягодами и грибами", "what": "ягоды и грибы", "cat": ["strawberry"]},
+	"any": {"name": "Универсальный торговец", "what": "", "cat": []},
+}
+
+
+static func universal_offer(day_: int) -> Dictionary:
+	var sid := Location.season_id(day_)
+	var d := Location.season_day(day_)
+	var period := ((day_ - 1) / Location.SEASON_DAYS) * 2 + (0 if d <= 5 else 1)
+	var pool := []
+	for i in CROPS.size():
+		if not can_plant(CROPS[i]["key"], sid):
+			pool.append([Location.hash3(period, i, 71), CROPS[i]["key"]])
+	pool.sort_custom(func(a, b): return a[0] < b[0])
+	return {"list": pool.slice(0, 3).map(func(p): return p[1]), "until": 5 if d <= 5 else Location.SEASON_DAYS - 1}
+
+
+## Что продаёт торговец сегодня и почём.
+static func trader_seeds(who: String, day_: int) -> Array:
+	if who == "any":
+		return universal_offer(day_)["list"].map(func(k): return [k, roundi(crop(k)["seed"] * 1.5)])
+	var out := []
+	for k in TRADERS[who]["cat"]:
+		if can_plant(k, Location.season_id(day_)):
+			out.append([k, int(crop(k)["seed"])])
+	return out
+
+
+## Насколько сегодня цена отличается от обычной: "up", "down" или "".
+static func trend(day_: int, key: String) -> String:
+	var f := 0.8 + 0.45 * Location.hash3(day_, CROPS.find(crop(key)) + 1, 99)
+	return "up" if f > 1.08 else ("down" if f < 0.92 else "")
+
+
+## Продать торговцу урожай игрока: key — культура ("" — всё, что он берёт), n — сколько (0 — всё). Возвращает выручку.
+func sell(peer: int, who: String, key: String, n: int) -> int:
+	var got := 0
+	var a := inv_of(peer)
+	for i in a.size():
+		var s: Variant = a[i]
+		if s == null or not String(s["id"]).begins_with("prod:"):
+			continue
+		var k := String(s["id"]).get_slice(":", 1)
+		if k not in TRADERS[who]["cat"] or (key != "" and k != key):
+			continue
+		var t: int = s["n"] if n <= 0 else mini(n, s["n"])
+		take(peer, i, t)
+		got += t * price(day, k)
+		if n > 0:
+			n -= t
+			if n <= 0:
+				break
+	money += got
+	return got
+
+
+## Купить семена: деньги общие, семена — в инвентарь покупателя. Возвращает сообщение об ошибке или "".
+func buy(peer: int, who: String, key: String, n: int) -> String:
+	var cost := 0
+	for offer in trader_seeds(who, day):
+		if offer[0] == key:
+			cost = offer[1] * n
+	if cost <= 0:
+		return "Сегодня этого нет в продаже."
+	if money < cost:
+		return "Не хватает монет."
+	var left := add_item(peer, "seed:" + key, n)
+	if left > 0:
+		take_id(peer, "seed:" + key, n - left)
+		return "Инвентарь полон."
+	money -= cost
+	return ""
+
+
+## Забрать n штук предмета id из любых ячеек.
+func take_id(peer: int, id: String, n: int) -> void:
+	var a := inv_of(peer)
+	for i in range(a.size() - 1, -1, -1):
+		if n <= 0:
+			return
+		if a[i] != null and a[i]["id"] == id:
+			var t: int = mini(n, a[i]["n"])
+			take(peer, i, t)
+			n -= t
+
+
 ## Положить урожай игрока в ящик для продажи: key — культура ("" — весь урожай), n — сколько (0 — всё).
 func ship(peer: int, key: String, n: int) -> void:
 	var a := inv_of(peer)
@@ -386,16 +490,16 @@ func ship(peer: int, key: String, n: int) -> void:
 				return
 
 
-func add_drop(item: String, n: int, x: float, z: float) -> int:
+func add_drop(item: String, n: int, x: float, z: float, loc: String = "farm") -> int:
 	var id := next_drop
 	next_drop += 1
-	drops[id] = {"item": item, "n": n, "x": x, "z": z}
+	drops[id] = {"item": item, "n": n, "x": x, "z": z, "loc": loc}
 	return id
 
 
 ## Всё состояние одним словарём: для отправки по сети (и для сохранения игры потом).
 func to_dict() -> Dictionary:
-	return {"day": day, "money": money, "shipped": shipped,
+	return {"day": day, "money": money, "shipped": shipped, "mods": mods,
 		"plots": plots, "drops": drops, "next_drop": next_drop, "snow": snow}
 
 
@@ -408,4 +512,5 @@ func from_dict(d: Dictionary) -> void:
 	for id in d["drops"]:
 		drops[int(id)] = d["drops"][id]
 	next_drop = int(d["next_drop"])
+	mods = d.get("mods", {})
 	snow = d["snow"]

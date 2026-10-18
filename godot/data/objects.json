@@ -6,7 +6,15 @@
 		{"key": "=", "id": "path", "name": "Тропинка", "walk": true, "color": "#e6c88c"},
 		{"key": "~", "id": "water", "name": "Вода", "walk": false, "color": "#2f7fe0"},
 		{"key": "P", "id": "site", "name": "Место под постройку", "walk": true, "color": "#f0902a"},
-		{"key": "#", "id": "void", "name": "Непроходимо", "walk": false, "color": "#111111"}
+		{"key": "#", "id": "void", "name": "Непроходимо", "walk": false, "color": "#111111"},
+		{"key": "Q", "id": "field_wheat", "name": "Соседское поле: пшеница", "walk": true, "color": "#c9a23a", "tile": "field_wheat"},
+		{"key": "N", "id": "field_sun", "name": "Соседское поле: подсолнухи", "walk": true, "color": "#3f8a2f", "tile": "field_sun"},
+		{"key": "q", "id": "field_wheat_far", "name": "Поле за краем: пшеница", "walk": false, "color": "#a8862f", "tile": "field_wheat"},
+		{"key": "n", "id": "field_sun_far", "name": "Поле за краем: подсолнухи", "walk": false, "color": "#2f6a24", "tile": "field_sun"},
+		{"key": "V", "id": "ditch", "name": "Канава", "walk": false, "color": "#2f5fb8"},
+		{"key": "O", "id": "cobbles", "name": "Брусчатка", "walk": true, "color": "#a8a294"},
+		{"key": "b", "id": "bridge_l", "name": "Мост: левый край", "walk": true, "color": "#a97c50"},
+		{"key": "d", "id": "bridge_r", "name": "Мост: правый край", "walk": true, "color": "#a97c50"}
 	],
 	"objects": [
 		{"id": "tree0", "name": "Дерево", "group": "Природа", "sprite": "tree0", "seasonal": true},
@@ -22,6 +30,16 @@
 		{"id": "mailbox", "name": "Почтовый ящик", "group": "Постройки", "sprite": "mailbox", "snow": true},
 		{"id": "sign", "name": "Табличка", "group": "Постройки", "sprite": "sign", "snow": true, "props": ["text"]},
 		{"id": "stake", "name": "Колышек", "group": "Постройки", "sprite": "stake", "snow": true, "block": false, "shadow": false},
+		{"id": "signpost", "name": "Указатель", "group": "Постройки", "sprite": "signpost", "snow": true, "props": ["text"]},
+		{"id": "scarecrow", "name": "Пугало", "group": "Постройки", "sprite": "scarecrow", "snow": true, "props": ["text"]},
+		{"id": "haystack", "name": "Стог сена (осенью)", "group": "Постройки", "sprite": "haystack", "snow": true, "seasons": ["autumn"], "props": ["text"]},
+		{"id": "barrier_h", "name": "Шлагбаум поперёк", "group": "Постройки", "sprite": "barrier_h", "snow": true, "size": [2, 1], "props": ["text"]},
+		{"id": "barrier_v", "name": "Шлагбаум вдоль", "group": "Постройки", "sprite": "barrier_v", "snow": true, "size": [1, 2], "props": ["text"]},
+		{"id": "stall", "name": "Прилавок", "group": "Рынок", "sprite": "stall", "snow": true, "shop": true, "size": [4, 3], "props": ["trader"], "traders": ["fruit", "veg", ""]},
+		{"id": "stallside", "name": "Прилавок боком", "group": "Рынок", "sprite": "stallside", "snow": true, "shop": true, "size": [3, 4], "props": ["trader"], "traders": ["berry", ""]},
+		{"id": "stallback", "name": "Прилавок задом", "group": "Рынок", "sprite": "stallback", "snow": true, "size": [4, 2]},
+		{"id": "tent", "name": "Шатёр торговца", "group": "Рынок", "sprite": "tent", "snow": true, "shop": true, "size": [4, 4], "props": ["trader"], "traders": ["any"]},
+		{"id": "fountain", "name": "Фонтан", "group": "Рынок", "sprite": "fountain", "snow": true, "size": [3, 3]},
 		{"id": "exit", "name": "Выход в локацию", "group": "Служебное", "block": false, "color": "#a040e0", "props": ["to"]},
 		{"id": "spawn", "name": "Старт игрока", "group": "Служебное", "block": false, "color": "#ffffff"}
 	]

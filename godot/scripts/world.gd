@@ -26,16 +26,25 @@ var _look := "summer"
 var _flowers := {}        # клетка -> спрайт цветов (убирается, когда клетку вскопали)
 var _plots := {}          # клетка -> узел грядки
 var _drops := {}          # id -> {node, from, to, t, key}
+var _cell_sprites := {}   # клетка, где стоит объект -> его спрайт (чтобы убрать срубленное)
+var _shake := {}          # спрайт -> сколько ещё качаться
+var _shops := []          # прилавки: {sprite, name} — открыты или закрыты по часам рынка
+var _fountains := []      # фонтаны: {sprite, frames}
+var _fountain_t := 0.0
+var _snow := false
+var _market_open := false
 
 
 func setup(p_atlas: Atlas, p_map: Location) -> void:
 	atlas = p_atlas
 	map = p_map
-	_outer_ground()
 
 
-## Пересобрать карту на день: земля, вода и спрайты зависят от времени года.
-func build(day: int, farm: Farm) -> void:
+## Пересобрать локацию на день: земля, вода и спрайты зависят от времени года.
+func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
+	map = p_map
+	map.season = Location.season_id(day)
+	_market_open = market_open
 	if content:
 		content.free()
 	content = Node3D.new()
@@ -45,11 +54,17 @@ func build(day: int, farm: Farm) -> void:
 	_flowers.clear()
 	_plots.clear()
 	_drops.clear()
+	_shops.clear()
+	_fountains.clear()
+	_cell_sprites.clear()
+	_shake.clear()
 	var snow := Location.snow_cover(day)
+	_snow = snow
 	var look := Location.look_name(day, snow)
 	_look = look
 	var season := Location.season_id(day)
-	_ground(look, snow)
+	_outer_ground()
+	_ground(look, snow, day)
 	_water(season == "winter")
 
 	for o in map.objects:
@@ -58,15 +73,18 @@ func build(day: int, farm: Farm) -> void:
 		if d.get("model", "") == "house":
 			_house(o["x"], o["y"], size, d)
 			continue
-		if not d.has("sprite"):
-			continue    # служебные метки: выход, старт игрока
-		var sprite_name: String = d["sprite"]
-		if d.get("seasonal", false):
-			sprite_name += "_" + look
-		elif snow and d.get("snow", false):
-			sprite_name += "_snow"
+		if not d.has("sprite") or not map.in_season(o):
+			continue    # служебные метки (выход, старт игрока) и объекты не своего сезона
+		var sprite_name := sprite_for(o, look, snow, market_open)
 		# спрайт стоит посередине нижнего ряда своих клеток
-		_obj(sprite_name, Vector3(o["x"] + size.x / 2.0, 0, o["y"] + size.y - 0.5), d.get("shadow", true))
+		var sp := _obj(sprite_name, Vector3(o["x"] + size.x / 2.0, 0, o["y"] + size.y - 0.5), d.get("shadow", true))
+		if sp == null:
+			continue
+		_cell_sprites[Vector2i(o["x"], o["y"])] = sp
+		if d.get("shop", false):
+			_shops.append({"sprite": sp, "obj": o})
+		if o["id"] == "fountain":
+			_fountains.append({"sprite": sp, "frames": _fountain_frames(sprite_name, season == "winter")})
 
 	# цветы растут на клетках «трава с цветами», где ничего не стоит
 	if not snow and season != "winter":
@@ -75,13 +93,113 @@ func build(day: int, farm: Farm) -> void:
 			for x in map.W:
 				if map.ground_at(x, y) == "," and map.object_at(x, y) == null and farm.plot_at(x, y) == null:
 					_flowers[Vector2i(x, y)] = _obj("flower_%s_%d" % [flowers, int(Location.hash3(x, y, 31) * 8)], Vector3(x + 0.5, 0, y + 0.5), false)
-	for key in farm.plots:
-		var xy: PackedStringArray = key.split(",")
-		sync_plot(int(xy[0]), int(xy[1]), farm.plots[key])
+	# подсолнухи на соседских полях: через клетку, летом растут, осенью отцветают
+	if not snow and (season == "summer" or season == "autumn"):
+		var stage := 2 if season == "autumn" else (0 if Location.season_day(day) < 4 else 1)
+		for y in map.H:
+			for x in map.W:
+				if (map.ground_at(x, y) == "N" or map.ground_at(x, y) == "n") and (x + y) % 2 == 0 and map.object_at(x, y) == null:
+					_obj("sunflower_%d" % stage, Vector3(x + 0.5, 0, y + 0.5))
+	if map.id == "farm":
+		for key in farm.plots:
+			var xy: PackedStringArray = key.split(",")
+			sync_plot(int(xy[0]), int(xy[1]), farm.plots[key])
 	for id in farm.drops:
 		var d: Dictionary = farm.drops[id]
-		add_drop(id, d["item"], Vector3(d["x"], 0, d["z"]), Vector3(d["x"], 0, d["z"]))
+		if d.get("loc", "farm") == map.id:
+			add_drop(id, d["item"], Vector3(d["x"], 0, d["z"]), Vector3(d["x"], 0, d["z"]))
 	set_tint(_tint)
+
+
+## Имя спрайта объекта с учётом сезона, снега и (для прилавков) торговца и часов рынка.
+func sprite_for(o: Dictionary, look: String, snow: bool, market_open: bool) -> String:
+	var d := Location.def(o["id"])
+	var name: String = d["sprite"]
+	if d.get("seasonal", false):
+		return name + "_" + look
+	if d.get("shop", false):
+		var who: String = o.get("trader", "")
+		name += "_%s_%d" % [who if who != "" else "empty", 1 if market_open and who != "" else 0]
+	if snow and d.get("snow", false):
+		name += "_snow"
+	return name
+
+
+## Клетка изменилась (срубили, разбили, скосили): убрать старый спрайт и поставить новый, если есть что ставить.
+func update_cell(x: int, y: int) -> void:
+	var cell := Vector2i(x, y)
+	for dict in [_cell_sprites, _flowers]:
+		if dict.has(cell):
+			var old: Sprite3D = dict[cell]
+			sprites.erase(old)
+			_shake.erase(old)
+			old.free()
+			dict.erase(cell)
+	var o: Variant = map.object_at(x, y)
+	if o != null and o["x"] == x and o["y"] == y and Location.def(o["id"]).has("sprite"):
+		var size := Location.object_size(o["id"])
+		var d := Location.def(o["id"])
+		var sp := _obj(sprite_for(o, _look, _snow, _market_open), Vector3(x + size.x / 2.0, 0, y + size.y - 0.5), d.get("shadow", true))
+		if sp:
+			sp.modulate = _tint
+			_cell_sprites[cell] = sp
+
+
+## Удар инструментом: объект качается, вокруг поднимается пыль.
+func hit_fx(x: int, y: int, kind: String) -> void:
+	var sp: Sprite3D = _cell_sprites.get(Vector2i(x, y))
+	if sp:
+		_shake[sp] = 0.22
+	var colors := {"chop": Color("#c99a66"), "mine": Color("#b8b8c0"), "mow": Color("#f5d33b"), "till": Color("#7a5236"), "water": Color("#9cc8f4")}
+	puff(Vector3(x + 0.5, 0.3, y + 0.5), colors.get(kind, Color.WHITE))
+
+
+## Облачко пыли или брызг: несколько квадратиков разлетаются и падают.
+func puff(at: Vector3, color: Color, n := 8) -> void:
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.amount = n
+	p.lifetime = 0.5
+	p.explosiveness = 1.0
+	p.direction = Vector3.UP
+	p.spread = 70.0
+	p.initial_velocity_min = 1.0
+	p.initial_velocity_max = 2.2
+	p.gravity = Vector3(0, -6, 0)
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(0.09, 0.09)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = color * _tint
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mesh.material = mat
+	p.mesh = mesh
+	p.position = at
+	content.add_child(p)
+	p.emitting = true
+	p.finished.connect(p.queue_free)
+
+
+## Рынок открылся или закрылся: торговцы появляются за прилавками или прилавки закрываются ставнями.
+func set_market_open(open: bool) -> void:
+	if open == _market_open:
+		return
+	_market_open = open
+	for s in _shops:
+		var name := sprite_for(s["obj"], _look, _snow, open)
+		if atlas.has(name):
+			s["sprite"].region_rect = Rect2(atlas.rect(name))
+
+
+## Кадры фонтана: сам фонтан с водой поверх, 12 кадров (или один замёрзший).
+func _fountain_frames(base: String, ice: bool) -> Array:
+	var frames := []
+	var r := atlas.rect(base)
+	for f in (["fountainwater_ice"] if ice else range(12).map(func(i): return "fountainwater_%d" % i)):
+		var img := atlas.image.get_region(r)
+		img.blend_rect(atlas.image, atlas.rect(f), Vector2i.ZERO)
+		frames.append(ImageTexture.create_from_image(img))
+	return frames
 
 
 ## Цвет дневного света. Спрайты не освещаются солнцем, поэтому подкрашиваем их сами.
@@ -187,6 +305,24 @@ func drop_distance(id: int, player: Vector3) -> float:
 
 
 func tick(delta: float) -> void:
+	for sp in _shake.keys():
+		_shake[sp] -= delta
+		var base: float = sp.get_meta("x0", sp.position.x)
+		if not sp.has_meta("x0"):
+			sp.set_meta("x0", base)
+		if _shake[sp] <= 0.0:
+			sp.position.x = base
+			_shake.erase(sp)
+		else:
+			sp.position.x = base + sin(_shake[sp] * 60.0) * 0.06
+	if not _fountains.is_empty():
+		_fountain_t += delta
+		var f := int(_fountain_t / 0.185)
+		for fo in _fountains:
+			var sp: Sprite3D = fo["sprite"]
+			var frames: Array = fo["frames"]
+			sp.region_enabled = false
+			sp.texture = frames[f % frames.size()]
 	var now := Time.get_ticks_msec() / 1000.0
 	for id in _drops:
 		var d: Dictionary = _drops[id]
@@ -233,7 +369,10 @@ func _height(x: int, y: int) -> float:
 	return 0.0
 
 
-func _ground(look: String, snow: bool) -> void:
+func _ground(look: String, snow: bool, day: int) -> void:
+	# поля меняются и летом (пшеница зреет): для них свой вид на каждый летний день
+	var field_look := look if Location.season_id(day) != "summer" else "summer%02d" % Location.season_day(day)
+	var ice := Location.season_id(day) == "winter"
 	var img := Image.create(map.W * T, map.H * T, false, Image.FORMAT_RGBA8)
 	for y in map.H:
 		for x in map.W:
@@ -242,12 +381,25 @@ func _ground(look: String, snow: bool) -> void:
 			var tile: String
 			if c == "~":
 				tile = "path_0"
+			elif c == "V":
+				# канава тянется дальше и поворачивает: смотрим, где соседние клетки канавы
+				var m := (1 if map.ground_at(x - 1, y) == "V" else 0) | (2 if map.ground_at(x + 1, y) == "V" else 0) \
+					| (4 if map.ground_at(x, y - 1) == "V" else 0) | (8 if map.ground_at(x, y + 1) == "V" else 0)
+				tile = "ditch_%d%s" % [m, "_ice" if ice else ""]
 			elif snow:
 				tile = "snow_%d" % v
 			elif c == "=":
 				tile = "path_%d" % v
 			elif c == "P":
 				tile = "site_%d" % v
+			elif c == "Q" or c == "q":
+				tile = "field_wheat_%s_%d" % [field_look, v]
+			elif c == "N" or c == "n":
+				tile = "field_sun_%s_%d" % [field_look, v]
+			elif c == "O":
+				tile = "cobbles_%d" % v
+			elif c == "b" or c == "d":
+				tile = "bridge_%d" % (0 if c == "b" else 1)
 			else:
 				tile = "grass_%s_%d" % [look, v]
 			if c == "#":
@@ -308,7 +460,7 @@ func _outer_ground() -> void:
 	mi.mesh = st.commit()
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mi)
+	content.add_child(mi)
 
 
 # ---------- вода ----------

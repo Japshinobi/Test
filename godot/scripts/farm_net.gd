@@ -88,35 +88,58 @@ func is_target(cell: Vector2i) -> bool:
 ## Игрок стоит рядом с клеткой и применяет к ней то, что в руках (или осматривает предмет).
 func act(cell: Vector2i) -> void:
 	var map: Location = main.map
+	var hud: Node = main.hud
 	var o: Variant = map.object_at(cell.x, cell.y)
+	var t := tool()
 	if o != null:
-		var d := Location.def(o["id"])
+		var id := String(o["id"])
+		var d := Location.def(id)
 		if d.get("model", "") == "house":
 			var door: Array = d.get("door", [0, 0])
 			if cell == Vector2i(o["x"] + int(door[0]), o["y"] + int(door[1])):
-				main.hud.ask_sleep()
+				hud.ask_sleep()
 			else:
-				main.hud.toast("Дедушкин дом. Крыша течёт, доски скрипят. Нужен ремонт.")
+				hud.toast("Дедушкин дом. Крыша течёт, доски скрипят. Нужен ремонт.")
 			return
-		match String(o["id"]):
+		match id:
 			"bin":
-				main.hud.open_ship()
+				hud.open_ship()
 			"mailbox":
-				main.hud.show_message("Почтовый ящик", "Писем пока нет. Сюда будут приходить новости и объявления.")
+				hud.show_message("Почтовый ящик", "Писем пока нет. Сюда будут приходить извещения: о смене сезона, о погоде и другие новости.")
 			"sign":
-				main.hud.show_message("Табличка", String(o.get("text", "")))
+				hud.show_message("Табличка", String(o.get("text", "")))
 			"well":
 				request("refill")
 			"bigoak":
-				main.hud.toast("Огромный старый дуб перегородил дорогу. Что за ним, узнаем позже.")
+				hud.toast("Огромный старый дуб перегородил дорогу. Что за ним, узнаем позже.")
+			"signpost", "scarecrow", "haystack", "barrier_h", "barrier_v":
+				hud.toast(String(o.get("text", "")))
+			"fountain":
+				hud.toast("Фонтан замёрз до весны." if Location.season_id(main.day) == "winter" else "Фонтан на рыночной площади. Вода журчит.")
+			"stall", "stallside", "tent", "stallback":
+				var who := String(o.get("trader", ""))
+				if who == "":
+					hud.toast("Свободное место. Здесь появится новый торговец.")
+				elif not main.market_open():
+					hud.toast("Сегодня у рынка выходной: последний день сезона." if Location.season_day(main.day) == Location.SEASON_DAYS else "Рынок открыт с 8:00 до 18:00.")
+				else:
+					hud.open_trader(who)
+			"tree0", "tree1", "stump", "twigs", "rock":
+				request("strike", [main.loc_id, cell.x, cell.y, sel])
 			_:
-				if d.get("block", true):
-					main.hud.toast("Топор и кирка появятся на следующих шагах.")
+				pass
 		return
-	if map.ground_at(cell.x, cell.y) == "~":
+	var g := map.ground_at(cell.x, cell.y)
+	if g == "~":
 		request("refill")
 		return
-	request("use", [cell.x, cell.y, sel])
+	if (g == "Q" or g == "N") and t != "can":
+		hud.toast("Это соседское поле: здесь ничего не собрать.")
+		return
+	if t == "axe" or t == "pick" or t == "scythe":
+		request("strike", [main.loc_id, cell.x, cell.y, sel])
+		return
+	request("use", [main.loc_id, cell.x, cell.y, sel])
 
 
 ## Попросить хозяина что-то сделать. Если хозяин — мы сами, делаем сразу.
@@ -137,9 +160,10 @@ func net_request(action: String, args: Array) -> void:
 func _host(peer: int, action: String, args: Array) -> void:
 	match action:
 		"use":
-			var x: int = args[0]
-			var y: int = args[1]
-			var r := farm.use(main.map, peer, x, y, args[2])
+			var loc: String = args[0]
+			var x: int = args[1]
+			var y: int = args[2]
+			var r := farm.use(Location.get_loc(loc), peer, x, y, args[3])
 			if r.has("msg"):
 				_to(peer, "net_toast", [r["msg"]])
 			if r.get("plot", false):
@@ -149,7 +173,9 @@ func _host(peer: int, action: String, args: Array) -> void:
 			if r.get("water", false):
 				_to(peer, "net_water", [farm.water_of(peer)])
 			if r.has("harvest"):
-				_spill(x, y, r["harvest"][0], r["harvest"][1])
+				_spill(loc, x, y, "prod:" + r["harvest"][0], r["harvest"][1])
+		"strike":
+			_strike(peer, args[0], args[1], args[2], args[3])
 		"refill":
 			if farm.water_of(peer) >= Farm.CAN_CAP:
 				_to(peer, "net_toast", ["Лейка уже полная."])
@@ -157,6 +183,21 @@ func _host(peer: int, action: String, args: Array) -> void:
 				farm.water[peer] = Farm.CAN_CAP
 				_to(peer, "net_water", [Farm.CAN_CAP])
 				_to(peer, "net_toast", ["Лейка наполнена: %d л." % Farm.CAN_CAP])
+		"sell":
+			var got := farm.sell(peer, args[0], args[1], args[2])
+			if got > 0:
+				_send_my_inv(peer)
+				_send_inv()
+				_to(peer, "net_toast", ["+%d монет" % got])
+				_to(peer, "net_sfx", ["coin"])
+		"buy":
+			var err := farm.buy(peer, args[0], args[1], args[2])
+			if err != "":
+				_to(peer, "net_toast", [err])
+			else:
+				_send_my_inv(peer)
+				_send_inv()
+				_to(peer, "net_sfx", ["coin"])
 		"ship":
 			farm.ship(peer, args[0], args[1])
 			_send_my_inv(peer)
@@ -179,12 +220,12 @@ func _host(peer: int, action: String, args: Array) -> void:
 					farm.drops.erase(id)
 					_all("net_drop_gone", [id])
 		"drop":
-			# выбросить из ячейки на землю перед собой: args = [ячейка, сколько (0 — всё), x, z]
+			# выбросить из ячейки на землю перед собой: args = [ячейка, сколько (0 — всё), x, z, локация]
 			var got: Variant = farm.take(peer, args[0], args[1])
 			if got != null:
 				_send_my_inv(peer)
-				var did := farm.add_drop(got["id"], got["n"], args[2], args[3])
-				_all("net_drops", [[[did, got["id"], got["n"], args[2], args[3], args[2], args[3], peer]]])
+				var did := farm.add_drop(got["id"], got["n"], args[2], args[3], args[4])
+				_all("net_drops", [[[did, got["id"], got["n"], args[2], args[3], args[2], args[3], peer, args[4]]]])
 		"erase":
 			if farm.take(peer, args[0], 0) != null:
 				_send_my_inv(peer)
@@ -199,17 +240,70 @@ func _host(peer: int, action: String, args: Array) -> void:
 			_all("net_sleepers", [sleeping.keys()])
 
 
-## Урожай разлетается вокруг грядки в пределах клетки.
-func _spill(x: int, y: int, key: String, n: int) -> void:
+## Урожай, дрова и камни разлетаются вокруг клетки в пределах одной клетки.
+func _spill(loc: String, x: int, y: int, item: String, n: int) -> void:
 	var list := []
 	var from := Vector3(x + 0.5, 0, y + 0.5)
 	for i in n:
 		var a := randf() * TAU
 		var r := 0.2 + randf() * 0.8
 		var to := from + Vector3(cos(a) * r, 0, sin(a) * r * 0.8)
-		var id := farm.add_drop("prod:" + key, 1, to.x, to.z)
-		list.append([id, "prod:" + key, 1, from.x, from.z, to.x, to.z, 0])
+		var id := farm.add_drop(item, 1, to.x, to.z, loc)
+		list.append([id, item, 1, from.x, from.z, to.x, to.z, 0, loc])
 	_all("net_drops", [list])
+
+
+# ---------- топор, кирка, коса ----------
+# Удары копятся: дерево падает с 3-го (остаётся пень), пень — со 2-го, камень — со 2-го, ветки — с 1-го.
+const NEED := {"tree0": 3, "tree1": 3, "stump": 2, "rock": 2, "twigs": 1}
+const GAIN := {"tree0": ["res:wood", 4], "tree1": ["res:wood", 4], "stump": ["res:wood", 2], "twigs": ["res:wood", 1], "rock": ["res:stone", 2]}
+var hits := {}
+
+
+func _strike(peer: int, loc: String, x: int, y: int, slot: int) -> void:
+	var map: Location = Location.get_loc(loc)
+	map.season = Location.season_id(farm.day)
+	var held_item: Variant = farm.inv_of(peer)[slot] if slot >= 0 and slot < farm.inv_of(peer).size() else null
+	var t := String(held_item["id"]).get_slice(":", 1) if held_item != null and String(held_item["id"]).begins_with("tool:") else ""
+	var o: Variant = map.object_at(x, y)
+	var id := String(o["id"]) if o != null else ""
+	var say := func(msg: String) -> void: _to(peer, "net_toast", [msg])
+	if id in ["tree0", "tree1", "stump", "twigs"]:
+		if t != "axe":
+			say.call("Дерево рубят топором." if id.begins_with("tree") else ("Пень выкорчёвывают топором." if id == "stump" else "Ветки рубят топором."))
+			return
+		if id.begins_with("tree") and map.is_edge(x, y):
+			say.call("Это край леса: деревья вдоль границы не рубят.")
+			return
+	elif id == "rock":
+		if t != "pick":
+			say.call("Камень разбивают киркой.")
+			return
+	else:
+		if t == "scythe":
+			if map.ground_at(x, y) == "," and o == null:
+				_all("net_mod", [loc, x, y, {"ground": "."}])
+				_all("net_fx", [loc, x, y, "mow"])
+			elif loc == "farm" and farm.plot_at(x, y) != null and farm.plot_at(x, y)["crop"] != "":
+				say.call("Какие культуры убирать косой, решим позже.")
+			else:
+				say.call("Здесь нечего косить.")
+		elif t == "axe":
+			say.call("Здесь нечего рубить.")
+		elif t == "pick":
+			say.call("Здесь нечего разбивать.")
+		return
+	var key := "%s:%d,%d" % [loc, x, y]
+	var n: int = hits.get(key, 0) + 1
+	_all("net_fx", [loc, x, y, "mine" if id == "rock" else "chop"])
+	if n < NEED[id]:
+		hits[key] = n
+		return
+	hits.erase(key)
+	_all("net_mod", [loc, x, y, {"replace": "stump"} if id.begins_with("tree") else {"remove": true}])
+	_spill(loc, x, y, GAIN[id][0], GAIN[id][1])
+	if id.begins_with("tree"):
+		say.call("Дерево упало. Остался пень.")
 
 
 ## Общее: деньги и что лежит в ящике для продажи.
@@ -304,6 +398,11 @@ func net_toast(msg: String) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
+func net_sfx(name_: String) -> void:
+	main.sfx(name_)
+
+
+@rpc("authority", "call_remote", "reliable")
 func net_plot(x: int, y: int, p: Variant) -> void:
 	if p == null:
 		farm.plots.erase(Farm.cell_key(x, y))
@@ -341,11 +440,31 @@ func net_water(n: int) -> void:
 	my_water = n
 
 
+## Карта изменилась: срубили дерево, разбили камень, скосили цветы.
+@rpc("authority", "call_remote", "reliable")
+func net_mod(loc: String, x: int, y: int, change: Dictionary) -> void:
+	Location.get_loc(loc).apply_mod(x, y, change)
+	if not farm.mods.has(loc):
+		farm.mods[loc] = {}
+	farm.mods[loc] = Location.get_loc(loc).mods
+	if loc == main.loc_id:
+		main.on_map_changed(x, y)
+
+
+## Удар по дереву или камню: качнуть его и поднять пыль (видно всем, кто рядом).
+@rpc("authority", "call_remote", "reliable")
+func net_fx(loc: String, x: int, y: int, kind: String) -> void:
+	if loc == main.loc_id:
+		main.world.hit_fx(x, y, kind)
+
+
 @rpc("authority", "call_remote", "reliable")
 func net_drops(list: Array) -> void:
-	# [id, предмет, сколько, откуда x, z, куда x, z, кто выбросил (0 — никто)]
+	# [id, предмет, сколько, откуда x, z, куда x, z, кто выбросил (0 — никто), локация]
 	for d in list:
-		farm.drops[int(d[0])] = {"item": d[1], "n": d[2], "x": d[5], "z": d[6]}
+		farm.drops[int(d[0])] = {"item": d[1], "n": d[2], "x": d[5], "z": d[6], "loc": d[8]}
+		if d[8] != main.loc_id:
+			continue
 		main.world.add_drop(int(d[0]), d[1], Vector3(d[3], 0, d[4]), Vector3(d[5], 0, d[6]))
 		# своё выброшенное не притягивается, пока не отойдёшь (иначе сразу прилетит обратно)
 		if int(d[7]) == me_id():
@@ -368,6 +487,8 @@ func net_sleepers(ids: Array) -> void:
 @rpc("authority", "call_remote", "reliable")
 func net_full(state: Dictionary, minutes: float) -> void:
 	farm.from_dict(state)
+	for loc in farm.mods:
+		Location.get_loc(loc).apply_mods(farm.mods[loc])
 	_picking.clear()
 	my_water = Farm.CAN_CAP
 	main.minutes = minutes
