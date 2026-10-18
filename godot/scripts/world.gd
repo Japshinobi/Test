@@ -32,6 +32,8 @@ var _shops := []          # прилавки: {sprite, name} — открыты 
 var _fountains := []      # фонтаны: {sprite, frames}
 var _fountain_t := 0.0
 var _snow := false
+var _day := 1
+var _trod_tex := {}       # картинка протоптанной клетки по названию земли под снегом
 var _market_open := false
 
 
@@ -60,6 +62,7 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 	_shake.clear()
 	var snow := Location.snow_cover(day)
 	_snow = snow
+	_day = day
 	var look := Location.look_name(day, snow)
 	_look = look
 	var season := Location.season_id(day)
@@ -100,6 +103,10 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 			for x in map.W:
 				if (map.ground_at(x, y) == "N" or map.ground_at(x, y) == "n") and (x + y) % 2 == 0 and map.object_at(x, y) == null:
 					_obj("sunflower_%d" % stage, Vector3(x + 0.5, 0, y + 0.5))
+	if snow:
+		for key in farm.snow_trod.get(map.id, {}):
+			var xy: PackedStringArray = String(key).split(",")
+			add_trod(int(xy[0]), int(xy[1]))
 	if map.id == "farm":
 		for key in farm.plots:
 			var xy: PackedStringArray = key.split(",")
@@ -143,6 +150,30 @@ func update_cell(x: int, y: int) -> void:
 		if sp:
 			sp.modulate = _tint
 			_cell_sprites[cell] = sp
+
+
+## Протоптанный снег: на клетке видна земля под снегом и следы.
+func add_trod(x: int, y: int) -> void:
+	if not _snow:
+		return
+	var bare := _tile_name(x, y, Location.look_name(_day, false), false, _day)
+	if bare == "":
+		return
+	var v := (x + y) % 4
+	var key := "%s|%d" % [bare, v]
+	if not _trod_tex.has(key):
+		var img := atlas.image.get_region(atlas.rect(bare))
+		img.blend_rect(atlas.image, atlas.rect("trodden_%d" % v), Vector2i.ZERO)
+		_trod_tex[key] = ImageTexture.create_from_image(img)
+	var sp := Sprite3D.new()
+	sp.texture = _trod_tex[key]
+	sp.pixel_size = 1.0 / T
+	sp.axis = Vector3.AXIS_Y
+	sp.shaded = true
+	sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sp.position = Vector3(x + 0.5, 0.008, y + 0.5)
+	content.add_child(sp)
 
 
 ## Удар инструментом: объект качается, вокруг поднимается пыль.
@@ -369,6 +400,39 @@ func _height(x: int, y: int) -> float:
 	return 0.0
 
 
+## Какая картинка земли в клетке: трава, тропинка, поле, канава… (со снегом или без).
+func _tile_name(x: int, y: int, look: String, snow: bool, day: int) -> String:
+	var field_look := look if Location.season_id(day) != "summer" else "summer%02d" % Location.season_day(day)
+	var ice := Location.season_id(day) == "winter"
+	var c := map.ground_at(x, y)
+	var v := int(Location.hash3(x, y, 3) * 4)
+	var tile := ""
+	if c == "~":
+		tile = "path_0"
+	elif c == "V":
+		# канава тянется дальше и поворачивает: смотрим, где соседние клетки канавы
+		var m := (1 if map.ground_at(x - 1, y) == "V" else 0) | (2 if map.ground_at(x + 1, y) == "V" else 0) \
+			| (4 if map.ground_at(x, y - 1) == "V" else 0) | (8 if map.ground_at(x, y + 1) == "V" else 0)
+		tile = "ditch_%d%s" % [m, "_ice" if ice else ""]
+	elif snow:
+		tile = "snow_%d" % v
+	elif c == "=":
+		tile = "path_%d" % v
+	elif c == "P":
+		tile = "site_%d" % v
+	elif c == "Q" or c == "q":
+		tile = "field_wheat_%s_%d" % [field_look, v]
+	elif c == "N" or c == "n":
+		tile = "field_sun_%s_%d" % [field_look, v]
+	elif c == "O":
+		tile = "cobbles_%d" % v
+	elif c == "b" or c == "d":
+		tile = "bridge_%d" % (0 if c == "b" else 1)
+	else:
+		tile = "grass_%s_%d" % [look, v]
+	return tile
+
+
 func _ground(look: String, snow: bool, day: int) -> void:
 	# поля меняются и летом (пшеница зреет): для них свой вид на каждый летний день
 	var field_look := look if Location.season_id(day) != "summer" else "summer%02d" % Location.season_day(day)
@@ -377,31 +441,7 @@ func _ground(look: String, snow: bool, day: int) -> void:
 	for y in map.H:
 		for x in map.W:
 			var c := map.ground_at(x, y)
-			var v := int(Location.hash3(x, y, 3) * 4)
-			var tile: String
-			if c == "~":
-				tile = "path_0"
-			elif c == "V":
-				# канава тянется дальше и поворачивает: смотрим, где соседние клетки канавы
-				var m := (1 if map.ground_at(x - 1, y) == "V" else 0) | (2 if map.ground_at(x + 1, y) == "V" else 0) \
-					| (4 if map.ground_at(x, y - 1) == "V" else 0) | (8 if map.ground_at(x, y + 1) == "V" else 0)
-				tile = "ditch_%d%s" % [m, "_ice" if ice else ""]
-			elif snow:
-				tile = "snow_%d" % v
-			elif c == "=":
-				tile = "path_%d" % v
-			elif c == "P":
-				tile = "site_%d" % v
-			elif c == "Q" or c == "q":
-				tile = "field_wheat_%s_%d" % [field_look, v]
-			elif c == "N" or c == "n":
-				tile = "field_sun_%s_%d" % [field_look, v]
-			elif c == "O":
-				tile = "cobbles_%d" % v
-			elif c == "b" or c == "d":
-				tile = "bridge_%d" % (0 if c == "b" else 1)
-			else:
-				tile = "grass_%s_%d" % [look, v]
+			var tile := _tile_name(x, y, look, snow, day)
 			if c == "#":
 				img.fill_rect(Rect2i(x * T, y * T, T, T), Color("#1b1d22"))    # непроходимо: тёмная земля
 				continue

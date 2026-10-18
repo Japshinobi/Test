@@ -8,6 +8,7 @@ const World := preload("res://scripts/world.gd")
 const Avatar := preload("res://scripts/avatar.gd")
 const Hud := preload("res://scripts/hud.gd")
 const FarmNet := preload("res://scripts/farm_net.gd")
+const Sfx := preload("res://scripts/sfx.gd")
 
 const PORT := 24565
 const SPEED := 3.6          # клеток в секунду
@@ -23,6 +24,7 @@ var map: Location
 var world: World
 var hud: Hud
 var farmnet: FarmNet
+var sound: Sfx
 var cam: Camera3D
 var sun: DirectionalLight3D
 var env: Environment
@@ -44,6 +46,9 @@ var minutes := 7.0 * 60.0
 var fast := false
 var time_frozen := false
 var _save_t := 0.0
+var _last_cell := Vector2i(-1, -1)
+var _trod_sent := {}
+var _snowfall: CPUParticles3D
 var _late_warned := false
 var yaw := 0.0
 var dist := 18.0
@@ -73,6 +78,8 @@ func _ready() -> void:
 	farmnet = FarmNet.new()
 	farmnet.setup(self)
 	add_child(farmnet)
+	sound = Sfx.new()
+	add_child(sound)
 
 	me = Avatar.new()
 	add_child(me)
@@ -100,6 +107,7 @@ func _ready() -> void:
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 	_update_camera(1.0)
 	_update_light(true)
+	_update_snowfall()
 	if not farmnet.load_game():
 		hud.call_deferred("open_intro")
 	else:
@@ -208,14 +216,55 @@ func skip_day() -> void:
 
 func set_day(d: int) -> void:
 	day = d
+	_trod_sent.clear()
 	world.build(day, farmnet.farm, map, market_open())
 	_make_astar()
 	_update_light(true)
+	_update_snowfall()
 
 
-## Звук (заглушка до шага со звуками).
-func sfx(_name: String) -> void:
-	pass
+func sfx(name_: String) -> void:
+	sound.play(name_)
+
+
+## Тёма ступил на новую клетку: зимой по свежему снегу остаются следы.
+func _step_on(cell: Vector2i) -> void:
+	if cell == _last_cell:
+		return
+	_last_cell = cell
+	if not Location.snow_cover(day):
+		return
+	var k := "%s:%d,%d" % [loc_id, cell.x, cell.y]
+	if _trod_sent.has(k) or farmnet.farm.snow_trod.get(loc_id, {}).has("%d,%d" % [cell.x, cell.y]):
+		return
+	_trod_sent[k] = true
+	farmnet.request("trod", [loc_id, cell.x, cell.y])
+
+
+## Падающий снег вокруг камеры в снежные дни.
+func _update_snowfall() -> void:
+	if _snowfall == null:
+		_snowfall = CPUParticles3D.new()
+		_snowfall.amount = 260
+		_snowfall.lifetime = 4.0
+		_snowfall.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+		_snowfall.emission_box_extents = Vector3(16, 0.5, 16)
+		_snowfall.direction = Vector3(0.15, -1, 0)
+		_snowfall.spread = 8.0
+		_snowfall.initial_velocity_min = 1.2
+		_snowfall.initial_velocity_max = 2.0
+		_snowfall.gravity = Vector3.ZERO
+		var mesh := QuadMesh.new()
+		mesh.size = Vector2(0.07, 0.07)
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = Color(1, 1, 1, 0.9)
+		mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		mesh.material = mat
+		_snowfall.mesh = mesh
+		add_child(_snowfall)
+	_snowfall.emitting = Location.snowing(day)
+	_snowfall.visible = _snowfall.emitting
 
 
 ## На клетке что-то изменилось (срубили дерево и т. п.): обновить картинку и проходимость.
@@ -271,6 +320,7 @@ func enter_location(id: String, from: String = "") -> void:
 	path.clear()
 	pending_act = null
 	_update_light(true)
+	_update_snowfall()
 	_refresh_remotes()
 	hud.toast(map.title)
 
@@ -358,6 +408,8 @@ func _update_light(sprites_too: bool) -> void:
 # ---------- камера ----------
 
 func _update_camera(delta: float) -> void:
+	if _snowfall:
+		_snowfall.position = me.position + Vector3(0, 7, 0)
 	var target := me.position + Vector3(0, 0.7, 0)
 	cam_target = cam_target.lerp(target, 1.0 - exp(-8.0 * delta))
 	var off := Vector3(sin(yaw) * cos(PITCH), sin(PITCH), cos(yaw) * cos(PITCH)) * dist
@@ -562,6 +614,7 @@ func _move(delta: float) -> void:
 		p.z += dir.z * step
 		moved = true
 	me.position = p
+	_step_on(Vector2i(floori(p.x), floori(p.z)))
 	var ex: Variant = map.exit_at(floori(p.x), floori(p.z))
 	if ex != null and moved:
 		_start_travel(String(ex.get("to", "")))

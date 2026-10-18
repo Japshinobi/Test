@@ -281,6 +281,10 @@ func _host(peer: int, action: String, args: Array) -> void:
 			var r := farm.use(Location.get_loc(loc), peer, x, y, args[3])
 			if r.has("msg"):
 				_to(peer, "net_toast", [r["msg"]])
+				if not r.has("fx"):
+					_to(peer, "net_sfx", ["nope"])
+			if r.has("fx"):
+				_all("net_fx", [loc, x, y, r["fx"]])
 			if r.get("plot", false):
 				_all("net_plot", [x, y, farm.plot_at(x, y)])
 			if r.get("inv", false):
@@ -291,6 +295,14 @@ func _host(peer: int, action: String, args: Array) -> void:
 				_spill(loc, x, y, "prod:" + r["harvest"][0], r["harvest"][1])
 		"strike":
 			_strike(peer, args[0], args[1], args[2], args[3])
+		"trod":
+			# протоптали снег: args = [локация, x, y]
+			if not farm.snow_trod.has(args[0]):
+				farm.snow_trod[args[0]] = {}
+			var k := "%d,%d" % [args[1], args[2]]
+			if not farm.snow_trod[args[0]].has(k):
+				farm.snow_trod[args[0]][k] = true
+				_all("net_trod", [args[0], args[1], args[2]])
 		"give":
 			# админ-панель: положить предметы себе в инвентарь
 			var left := farm.add_item(peer, args[0], args[1])
@@ -302,6 +314,7 @@ func _host(peer: int, action: String, args: Array) -> void:
 			else:
 				farm.water[peer] = Farm.CAN_CAP
 				_to(peer, "net_water", [Farm.CAN_CAP])
+				_to(peer, "net_sfx", ["water"])
 				_to(peer, "net_toast", ["Лейка наполнена: %d л." % Farm.CAN_CAP])
 		"sell":
 			var got := farm.sell(peer, args[0], args[1], args[2])
@@ -320,6 +333,7 @@ func _host(peer: int, action: String, args: Array) -> void:
 				_to(peer, "net_sfx", ["coin"])
 		"ship":
 			farm.ship(peer, args[0], args[1])
+			_to(peer, "net_sfx", ["plant"])
 			_send_my_inv(peer)
 			_send_inv()
 		"pickup":
@@ -332,6 +346,7 @@ func _host(peer: int, action: String, args: Array) -> void:
 					_to(peer, "net_full_bag", [id])
 					return
 				_send_my_inv(peer)
+				_to(peer, "net_sfx", ["pickup"])
 				_to(peer, "net_toast", ["+%d %s" % [got, String(Farm.item_info(d["item"])["name"]).to_lower()]])
 				if left > 0:
 					d["n"] = left
@@ -387,7 +402,10 @@ func _strike(peer: int, loc: String, x: int, y: int, slot: int) -> void:
 	var t := String(held_item["id"]).get_slice(":", 1) if held_item != null and String(held_item["id"]).begins_with("tool:") else ""
 	var o: Variant = map.object_at(x, y)
 	var id := String(o["id"]) if o != null else ""
-	var say := func(msg: String) -> void: _to(peer, "net_toast", [msg])
+	var say := func(msg: String) -> void:
+		_to(peer, "net_toast", [msg])
+		if not msg.begins_with("Дерево упало"):
+			_to(peer, "net_sfx", ["nope"])
 	if id in ["tree0", "tree1", "stump", "twigs"]:
 		if t != "axe":
 			say.call("Дерево рубят топором." if id.begins_with("tree") else ("Пень выкорчёвывают топором." if id == "stump" else "Ветки рубят топором."))
@@ -599,11 +617,21 @@ func net_mod(loc: String, x: int, y: int, change: Dictionary) -> void:
 		main.on_map_changed(x, y)
 
 
+@rpc("authority", "call_remote", "reliable")
+func net_trod(loc: String, x: int, y: int) -> void:
+	if not farm.snow_trod.has(loc):
+		farm.snow_trod[loc] = {}
+	farm.snow_trod[loc]["%d,%d" % [x, y]] = true
+	if loc == main.loc_id:
+		main.world.add_trod(x, y)
+
+
 ## Удар по дереву или камню: качнуть его и поднять пыль (видно всем, кто рядом).
 @rpc("authority", "call_remote", "reliable")
 func net_fx(loc: String, x: int, y: int, kind: String) -> void:
 	if loc == main.loc_id:
 		main.world.hit_fx(x, y, kind)
+		main.sfx({"mow": "till"}.get(kind, kind))
 
 
 @rpc("authority", "call_remote", "reliable")

@@ -482,6 +482,10 @@ func open_help() -> void:
 	_text(v, "Управление: тап или клик — подойти и сделать; тянуть или Q/E — повернуть камеру; колесо или два пальца — приблизить; пробел — действие; 1–0 — панель; I — инвентарь; H — админ-панель.", 14)
 	var h := _buttons(v)
 	_button(h, "Играть", close_dialog)
+	_button(h, "Звук: " + ("вкл" if main.sound.on else "выкл"), func() -> void:
+		main.sound.on = not main.sound.on
+		close_dialog()
+		open_help())
 	if main.farmnet.is_host():
 		_button(h, "Начать заново", _confirm_restart)
 
@@ -702,6 +706,18 @@ func open_inventory() -> void:
 		return
 	var v := _open("inventory", "Инвентарь", 700)
 	_text(v, "Монеты (общие): %d. Перетащите предмет в другую ячейку или за край окна — выбросить на землю. Долгое нажатие — меню." % main.farmnet.farm.money, 14)
+	# одежда: слоты есть, сами вещи появятся позже
+	var eq := HBoxContainer.new()
+	eq.add_theme_constant_override("separation", 8)
+	v.add_child(eq)
+	_text(eq, "Одежда:", 14)
+	for slot_name in ["Голова", "Тело", "Штаны", "Обувь"]:
+		var p := PanelContainer.new()
+		p.add_theme_stylebox_override("panel", _box(Color("#26304e"), Color("#5a6890")))
+		var l := _text(p, "%s\nпусто" % slot_name, 12)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		p.custom_minimum_size = Vector2(84, 0)
+		eq.add_child(p)
 	var grid := GridContainer.new()
 	grid.name = "Grid"
 	grid.columns = Farm.ROW

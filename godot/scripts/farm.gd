@@ -51,6 +51,8 @@ var next_drop := 1
 var snow := false
 ## Изменения карт по локациям: что срубили, разбили, скосили. "farm" -> {"x,y": изменение}
 var mods := {}
+## Протоптанный снег: локация -> {"x,y": true}. Свежий снег засыпает следы, весной снег тает.
+var snow_trod := {}
 
 
 func _init() -> void:
@@ -249,11 +251,11 @@ func use(map: Location, peer: int, x: int, y: int, slot: int) -> Dictionary:
 	if p != null and p["crop"] != "" and p["dead"]:
 		p["crop"] = ""
 		p["dead"] = false
-		return {"msg": "Увядшее растение убрано. Грядка свободна.", "plot": true}
+		return {"msg": "Увядшее растение убрано. Грядка свободна.", "plot": true, "fx": "till"}
 	if p != null and p["crop"] != "" and p["ripe"]:
 		var key: String = p["crop"]
 		var n := harvest(p)
-		return {"plot": true, "harvest": [key, n]}
+		return {"plot": true, "harvest": [key, n], "fx": "harvest"}
 	if tool == "axe" or tool == "pick" or tool == "scythe":
 		return {}
 	if tool == "":
@@ -264,7 +266,7 @@ func use(map: Location, peer: int, x: int, y: int, slot: int) -> Dictionary:
 		"hoe":
 			if p == null:
 				plots[cell_key(x, y)] = {"tilled": true, "watered": false, "crop": "", "age": 0.0, "ripe": false, "grown": false, "dead": false}
-				return {"plot": true}
+				return {"plot": true, "fx": "till"}
 			if p["crop"] != "":
 				return {"msg": "Тут растёт: %s." % crop(p["crop"])["name"].to_lower()}
 			return {"msg": "Земля уже вскопана. Выберите семена."}
@@ -279,7 +281,7 @@ func use(map: Location, peer: int, x: int, y: int, slot: int) -> Dictionary:
 				return {"msg": "Лейка пуста. Наберите воды в колодце или пруду."}
 			water[peer] = water_of(peer) - 1
 			p["watered"] = true
-			return {"plot": true, "water": true}
+			return {"plot": true, "water": true, "fx": "water"}
 		"seed":
 			var d := crop(crop_key)
 			if p == null:
@@ -296,7 +298,7 @@ func use(map: Location, peer: int, x: int, y: int, slot: int) -> Dictionary:
 			p["ripe"] = false
 			p["grown"] = false
 			p["dead"] = false
-			return {"plot": true, "inv": true}
+			return {"plot": true, "inv": true, "fx": "plant"}
 	return {}
 
 
@@ -369,8 +371,10 @@ func new_day() -> Dictionary:
 	if Location.season_id(day) == "winter":
 		if snowed:
 			snow = true
+			snow_trod = {}
 	else:
 		snow = false
+		snow_trod = {}
 	m["snowed"] = snowed
 	return m
 
@@ -499,7 +503,7 @@ func add_drop(item: String, n: int, x: float, z: float, loc: String = "farm") ->
 
 ## Всё состояние одним словарём: для отправки по сети (и для сохранения игры потом).
 func to_dict() -> Dictionary:
-	return {"day": day, "money": money, "shipped": shipped, "mods": mods,
+	return {"day": day, "money": money, "shipped": shipped, "mods": mods, "snow_trod": snow_trod,
 		"plots": plots, "drops": drops, "next_drop": next_drop, "snow": snow}
 
 
@@ -513,4 +517,5 @@ func from_dict(d: Dictionary) -> void:
 		drops[int(id)] = d["drops"][id]
 	next_drop = int(d["next_drop"])
 	mods = d.get("mods", {})
+	snow_trod = d.get("snow_trod", {})
 	snow = d["snow"]
