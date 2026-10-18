@@ -17,11 +17,126 @@ var sleeping := {}           # у хозяина: id игрока -> лёг сп
 var _picking := {}           # id предметов, которые мы уже попросили подобрать
 var _full: Array = []        # что не влезло в инвентарь: не тянем к себе, пока не отойдём
 
+## Постоянный номер игрока на этом устройстве: по нему хозяин узнаёт его при следующем подключении.
+var uid := ""
+var peer_uid := {}           # у хозяина: id в сети -> постоянный номер
+var saved_invs := {}         # у хозяина: постоянный номер -> инвентарь (и тех, кто сейчас не в игре)
+var saved_water := {}
+const SAVE_PATH := "user://save.json"
+const PLAYER_PATH := "user://player.cfg"
+
 
 func setup(p_main: Node) -> void:
 	main = p_main
 	name = "FarmNet"
 	farm.inv[1] = my_inv
+	uid = _load_uid()
+
+
+static func _load_uid() -> String:
+	var cfg := ConfigFile.new()
+	if cfg.load(PLAYER_PATH) == OK and cfg.has_section_key("player", "uid"):
+		return cfg.get_value("player", "uid")
+	var id := "%08x%08x" % [randi(), randi()]
+	cfg.set_value("player", "uid", id)
+	cfg.save(PLAYER_PATH)
+	return id
+
+
+# ---------- сохранение ----------
+# Сохраняет только хозяин игры (или тот, кто играет один): огород, изменения карт, предметы на земле,
+# день и время, инвентари всех игроков по их постоянным номерам. Кто подключался к другу, его мир не трогает.
+
+func save_game() -> void:
+	if main.net_mode() == "client":
+		return
+	_remember_players()
+	var data := farm.to_dict()
+	data["version"] = 1
+	data["minutes"] = main.minutes
+	data["invs"] = saved_invs
+	data["water"] = saved_water
+	data["loc"] = main.loc_id
+	data["pos"] = [main.me.position.x, main.me.position.z]
+	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(data))
+
+
+## Переписать инвентари тех, кто сейчас в игре, в общий список по постоянным номерам.
+func _remember_players() -> void:
+	saved_invs[uid] = my_inv
+	saved_water[uid] = my_water
+	for p in peer_uid:
+		if farm.inv.has(p):
+			saved_invs[peer_uid[p]] = farm.inv[p]
+			saved_water[peer_uid[p]] = farm.water_of(p)
+
+
+## Загрузить сохранённую игру. Возвращает false, если сохранения нет (тогда игра начинается заново).
+func load_game() -> bool:
+	if not FileAccess.file_exists(SAVE_PATH):
+		return false
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))
+	if not data is Dictionary:
+		return false
+	farm = Farm.new()
+	farm.from_dict(data)
+	farm.money = int(farm.money)
+	for k in farm.shipped:
+		farm.shipped[k] = int(farm.shipped[k])
+	for id in farm.drops:
+		farm.drops[id]["n"] = int(farm.drops[id]["n"])
+	saved_invs = {}
+	for u in data.get("invs", {}):
+		saved_invs[u] = _fix_inv(data["invs"][u])
+	saved_water = data.get("water", {})
+	my_inv = saved_invs.get(uid, Farm.new_inventory())
+	my_water = int(saved_water.get(uid, Farm.CAN_CAP))
+	farm.inv = {1: my_inv}
+	farm.water = {1: my_water}
+	Location._cache.clear()
+	for loc in farm.mods:
+		Location.get_loc(loc).apply_mods(farm.mods[loc])
+	main.minutes = float(data.get("minutes", 360.0))
+	main.day = farm.day
+	var loc: String = data.get("loc", "farm")
+	main.enter_location(loc if Location.exists(loc) else "farm")
+	var pos: Array = data.get("pos", [])
+	if pos.size() == 2 and main.map.walkable(floori(pos[0]), floori(pos[1])):
+		main.me.position = Vector3(pos[0], 0, pos[1])
+		main.cam_target = main.me.position
+	return true
+
+
+## Числа из файла приходят дробными: количество предметов делаем целым.
+static func _fix_inv(a: Array) -> Array:
+	var out := []
+	out.resize(Farm.INV_SIZE)
+	for i in mini(a.size(), Farm.INV_SIZE):
+		if a[i] != null:
+			out[i] = {"id": String(a[i]["id"]), "n": int(a[i]["n"])}
+	return out
+
+
+func delete_save() -> void:
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+	saved_invs.clear()
+	saved_water.clear()
+
+
+## Подключившийся игрок назвал свой постоянный номер: выдаём ему его инвентарь (или стартовый набор).
+@rpc("any_peer", "call_remote", "reliable")
+func net_hello(p_uid: String) -> void:
+	if not is_host():
+		return
+	var peer := multiplayer.get_remote_sender_id()
+	peer_uid[peer] = p_uid
+	farm.inv[peer] = saved_invs[p_uid] if saved_invs.has(p_uid) else Farm.new_inventory()
+	farm.water[peer] = int(saved_water.get(p_uid, Farm.CAN_CAP))
+	_send_my_inv(peer)
+	_to(peer, "net_water", [farm.water_of(peer)])
 
 
 func is_host() -> bool:
@@ -176,6 +291,11 @@ func _host(peer: int, action: String, args: Array) -> void:
 				_spill(loc, x, y, "prod:" + r["harvest"][0], r["harvest"][1])
 		"strike":
 			_strike(peer, args[0], args[1], args[2], args[3])
+		"give":
+			# админ-панель: положить предметы себе в инвентарь
+			var left := farm.add_item(peer, args[0], args[1])
+			_send_my_inv(peer)
+			_to(peer, "net_toast", ["Добавлено: %d" % (args[1] - left) + ("" if left == 0 else " (не поместилось %d)" % left)])
 		"refill":
 			if farm.water_of(peer) >= Farm.CAN_CAP:
 				_to(peer, "net_toast", ["Лейка уже полная."])
@@ -339,6 +459,7 @@ func end_day(note: String) -> void:
 	var m := farm.new_day()
 	sleeping.clear()
 	_all("net_new_day", [farm.to_dict(), m, note])
+	save_game()
 
 
 func on_peer_connected(id: int) -> void:
@@ -346,10 +467,17 @@ func on_peer_connected(id: int) -> void:
 		farm.water[id] = Farm.CAN_CAP
 		_to(id, "net_full", [farm.to_dict(), main.minutes])
 		_send_my_inv(id)
+	elif id == 1:
+		# мы подключились к хозяину: назовёмся, чтобы он вернул наш инвентарь
+		net_hello.rpc_id(1, uid)
 
 
 func on_peer_disconnected(id: int) -> void:
 	if is_host():
+		if peer_uid.has(id):
+			saved_invs[peer_uid[id]] = farm.inv.get(id, Farm.new_inventory())
+			saved_water[peer_uid[id]] = farm.water_of(id)
+			peer_uid.erase(id)
 		farm.water.erase(id)
 		farm.inv.erase(id)
 		sleeping.erase(id)
@@ -357,11 +485,31 @@ func on_peer_disconnected(id: int) -> void:
 			_check_sleep()
 
 
-## Хозяин пропал: дальше играем одни со своим огородом и своим инвентарём.
-func on_lost_host() -> void:
-	farm.inv = {1: my_inv}
-	farm.water = {1: my_water}
+## Начать заново (только хозяин): новый огород, нетронутые карты, стартовые инвентари у всех.
+func restart() -> void:
+	var peers := _peers()
+	delete_save()
+	farm = Farm.new()
+	for p in peers:
+		farm.inv_of(p)
+		farm.water[p] = Farm.CAN_CAP
+	my_inv = farm.inv[1]
+	hits.clear()
 	sleeping.clear()
+	_all("net_full", [farm.to_dict(), 360.0])
+	save_game()
+	for p in peers:
+		_send_my_inv(p)
+		_to(p, "net_water", [Farm.CAN_CAP])
+
+
+## Хозяин пропал или мы отключились: возвращаемся в свой мир (из своего сохранения или новый).
+func on_lost_host() -> void:
+	sleeping.clear()
+	peer_uid.clear()
+	_picking.clear()
+	_full.clear()
+	main.call_deferred("load_own_world")
 
 
 ## Предметы на земле сами летят к игроку; долетевшие просим у хозяина положить в инвентарь.
@@ -487,13 +635,25 @@ func net_sleepers(ids: Array) -> void:
 @rpc("authority", "call_remote", "reliable")
 func net_full(state: Dictionary, minutes: float) -> void:
 	farm.from_dict(state)
+	# карты заново с диска, поверх — изменения хозяина (срубленное, скошенное)
+	Location._cache.clear()
 	for loc in farm.mods:
 		Location.get_loc(loc).apply_mods(farm.mods[loc])
 	_picking.clear()
 	my_water = Farm.CAN_CAP
 	main.minutes = minutes
-	main.set_day(farm.day)
+	main.day = farm.day
+	main.enter_location("farm")
 	main.hud.refresh_farm()
+
+
+## Админ-панель хозяина: день сменился без ночи (растения не растут).
+@rpc("authority", "call_remote", "reliable")
+func net_set_day(d: int, snow_: bool) -> void:
+	farm.day = d
+	farm.snow = snow_
+	main.day = d
+	main.set_day(d)
 
 
 @rpc("authority", "call_remote", "reliable")

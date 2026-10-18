@@ -3,6 +3,7 @@ extends CanvasLayer
 ## и семенами (снизу), всплывающие сообщения и окна: сон, утро, ящик для продажи, инвентарь.
 
 const Farm := preload("res://scripts/farm.gd")
+const Location := preload("res://scripts/location.gd")
 
 var main: Node
 var root: Control
@@ -83,11 +84,13 @@ func setup(p_main: Node) -> void:
 	money_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	money_label.add_theme_color_override("font_color", Color("#f0cf7a"))
 	rv.add_child(money_label)
-	_button(rv, "Инвентарь", open_inventory)
+	var row2 := HBoxContainer.new()
+	rv.add_child(row2)
+	_button(row2, "Инвентарь", open_inventory)
+	_button(row2, "Справка", open_help)
 	test_box = HBoxContainer.new()
-	rv.add_child(test_box)
-	_button(test_box, "+ день", func() -> void: main.skip_day())
-	fast_btn = _button(test_box, "Время ×1", func() -> void: main.toggle_fast())
+	row2.add_child(test_box)
+	fast_btn = _button(test_box, "Админ", open_admin)
 	sleepers_label = Label.new()
 	sleepers_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sleepers_label.add_theme_font_size_override("font_size", 14)
@@ -165,8 +168,8 @@ func refresh() -> void:
 	host_btn.visible = net_state == "off"
 	join_btn.get_parent().visible = net_state == "off"
 	leave_btn.visible = net_state != "off"
-	test_box.visible = net_state != "client"
-	fast_btn.text = "Время ×%d" % main.time_speed()
+	if main.time_frozen:
+		clock.text += " (время стоит)"
 	status.text = main.net_status
 	tool_label.text = "В руках: " + main.farmnet.tool_name()
 	_refresh_belt()
@@ -413,28 +416,151 @@ func _player_name(id: int) -> String:
 	return "Тёма" if id == 1 else "Друг"
 
 
+const SEASON_TEXT := {
+	"spring": "Наступила весна! Снег сошёл, деревья просыпаются, на лугу зацветают цветы.",
+	"summer": "Наступило лето! Тепло, всё зелёное, самое время для огурцов и помидоров.",
+	"autumn": "Наступила осень! Листья скоро пожелтеют, а яблони дадут урожай.",
+	"winter": "Наступила зима! Земля промёрзла, огород отдыхает до весны. Скоро выпадет снег.",
+}
+
+
 func show_morning(m: Dictionary, note: String) -> void:
 	sleepers_label.text = ""
-	var v := _open("morning", "Утро. День %d, %s" % [main.day, String(main.season_text()).to_lower()])
+	var day: int = main.day
+	var sid := Location.season_id(day)
+	var v := _open("morning", "%s, день %d из %d" % [main.season_text(), Location.season_day(day), Location.SEASON_DAYS], 620)
 	var lines := PackedStringArray()
+	if m.get("season_changed", false):
+		lines.append(SEASON_TEXT[sid])
+		if not m.get("withered", {}).is_empty():
+			lines.append("Не пережили смену сезона: %s. Уберите увядшие растения с грядок." % ", ".join(m["withered"].keys().map(func(k): return "%s ×%d" % [Farm.crop(k)["name"], m["withered"][k]])))
+		var now := Farm.CROPS.filter(func(c): return Farm.can_plant(c["key"], sid)).map(func(c): return String(c["name"]).to_lower())
+		if not now.is_empty():
+			lines.append("В этом сезоне сажают: %s." % ", ".join(now))
+	if m.get("snowed", false) and sid == "winter":
+		lines.append("За ночь всё засыпало снегом.")
+	if Location.snowing(day):
+		lines.append("Сегодня идёт снег.")
+	if m.get("income", 0) > 0:
+		lines.append("За отгрузку из ящика получено %d монет." % m["income"])
 	if note != "":
 		lines.append(note)
-	if m.get("season_changed", false):
-		lines.append("Наступил новый сезон: %s." % String(main.season_text()).to_lower())
-	if m.get("snowed", false):
-		lines.append("Ночью выпал снег.")
-	for key in m.get("ripened", {}):
-		lines.append("Созрело: %s — %d." % [Farm.crop(key)["name"].to_lower(), m["ripened"][key]])
-	for key in m.get("withered", {}):
-		lines.append("Завяло не в свой сезон: %s — %d." % [Farm.crop(key)["name"].to_lower(), m["withered"][key]])
+	var ripe: Dictionary = m.get("ripened", {})
+	lines.append(("За ночь созрело: %s." % ", ".join(ripe.keys().map(func(k): return "%s ×%d" % [Farm.crop(k)["product"], ripe[k]]))) if not ripe.is_empty() else "Пока ничего не созрело. Растения тянутся к солнцу.")
 	if m.get("dry", 0) > 0:
-		lines.append("Без полива росли вдвое медленнее грядок: %d." % m["dry"])
-	if m.get("income", 0) > 0:
-		lines.append("Ящик для продажи принёс %d монет." % m["income"])
-	if lines.is_empty():
-		lines.append("Новый день на огороде.")
-	_text(v, "\n".join(lines))
-	_button(_buttons(v), "За работу!", close_dialog)
+		lines.append("Без полива осталось растений: %d. Они росли вдвое медленнее." % m["dry"])
+	var best := ""
+	var best_price := 0.0
+	for c in Farm.CROPS:
+		var pr := Farm.price(day, c["key"]) / float(c["sell"])
+		if best == "" or pr > best_price:
+			best = c["key"]
+			best_price = pr
+	lines.append("Сегодня дороже всего принимают: %s, по %d монет." % [String(Farm.crop(best)["product"]).to_lower(), Farm.price(day, best)])
+	_text(v, "\n\n".join(lines), 16)
+	_button(_buttons(v), "Доброе утро!", close_dialog)
+
+
+# ---------- вступление, справка, админ-панель ----------
+
+const HOW := "1. Мотыгой вскопайте землю на любой траве своего огорода (кроме двора у дома и дорог). Камни разбивают киркой, деревья, пни и ветки рубят топором, цветы скашивают косой.\n2. Возьмите семена и посадите их на вскопанную грядку.\n3. Полейте грядку из лейки. Воду набирают в колодце или пруду.\n4. Ночью растения подрастают. Без полива — вдвое медленнее.\n5. Год делится на четыре сезона по 12 дней. У каждой культуры свой сезон: когда он кончается, растение увядает. Зимой огород отдыхает, переживает её только яблоня.\n6. Урожай продают на рынке (вверх до перекрёстка, потом налево) или через ящик у дома — на 10% дешевле, деньги приходят утром. Семена покупают у торговцев; рынок открыт с 8:00 до 18:00, кроме последнего дня сезона.\n7. Дороги у края карты ведут в другие места: вверху перекрёсток, внизу речка, за ней лес.\n8. Чтобы лечь спать и начать новый день, подойдите к двери дома."
+
+
+func open_intro() -> void:
+	var v := _open("intro", "Дедушкин огород", 700)
+	_text(v, "Дедушка Матвей оставил внуку Тёме старый дом и заросший огород на краю деревни. В кармане 100 монет и пара пакетиков семян.\n\nПлан простой: вырастить урожай, продать его и привести дедушкин дом в порядок.", 16)
+	_text(v, HOW, 14)
+	_button(_buttons(v), "Начать", close_dialog)
+
+
+func open_help() -> void:
+	if is_busy():
+		return
+	var v := _open("help", "Справка", 700)
+	_text(v, "День %d. Огород, деньги и ящик для продажи общие; инвентарь у каждого свой." % main.day, 15)
+	_text(v, HOW, 14)
+	_text(v, "Управление: тап или клик — подойти и сделать; тянуть или Q/E — повернуть камеру; колесо или два пальца — приблизить; пробел — действие; 1–0 — панель; I — инвентарь; H — админ-панель.", 14)
+	var h := _buttons(v)
+	_button(h, "Играть", close_dialog)
+	if main.farmnet.is_host():
+		_button(h, "Начать заново", _confirm_restart)
+
+
+func _confirm_restart() -> void:
+	var v := _open("restart", "Начать заново?")
+	_text(v, "Весь прогресс сотрётся: деньги, грядки, инвентарь и всё, что срублено и построено.")
+	var h := _buttons(v)
+	_button(h, "Да, начать заново", func() -> void:
+		close_dialog()
+		main.restart_game())
+	_button(h, "Нет", close_dialog)
+
+
+## Админ-панель для проверки: сезон, день, время, выдача предметов. Сезон и день меняются сразу —
+## растения при этом не растут и не вянут. Время и день меняет только хозяин игры.
+func open_admin() -> void:
+	if is_busy() and dialog_kind != "admin":
+		return
+	var host: bool = main.farmnet.is_host()
+	var day: int = main.day
+	var v := _open("admin", "Админ-панель", 700)
+	_text(v, "Для проверки. При смене сезона и дня растения не растут и не увядают." + ("" if host else " Время и день меняет хозяин игры."), 14)
+	if host:
+		_text(v, "Сезон", 15).add_theme_color_override("font_color", Color("#9aa0b4"))
+		var hs := _buttons(v)
+		for i in 4:
+			var b := _button(hs, Location.SEASON_NAMES[i], func() -> void:
+				main.admin_set_day((day - 1) / (Location.SEASON_DAYS * 4) * Location.SEASON_DAYS * 4 + i * Location.SEASON_DAYS + Location.season_day(day))
+				open_admin())
+			if Location.season_index(day) == i:
+				b.add_theme_stylebox_override("normal", _box(Color("#4a63a8"), Color("#f0cf7a"), 2))
+		var hd := _buttons(v)
+		_text(hd, "День сезона:", 15)
+		var spin := SpinBox.new()
+		spin.min_value = 1
+		spin.max_value = Location.SEASON_DAYS
+		spin.value = Location.season_day(day)
+		hd.add_child(spin)
+		_button(hd, "Установить", func() -> void:
+			main.admin_set_day(day - Location.season_day(day) + int(spin.value))
+			open_admin())
+		_text(hd, "(всего дней: %d)" % day, 14)
+		var ht := _buttons(v)
+		_text(ht, "Время:", 15)
+		for t in [[360, "6:00"], [720, "12:00"], [1080, "18:00"], [1320, "22:00"]]:
+			_button(ht, t[1], func() -> void: main.admin_set_time(t[0]))
+		_button(ht, "Запустить время" if main.time_frozen else "Остановить время", func() -> void:
+			main.time_frozen = not main.time_frozen
+			open_admin())
+		var hf := _buttons(v)
+		_button(hf, "Пропустить ночь (растения растут)", func() -> void:
+			close_dialog()
+			main.skip_day())
+		_button(hf, "Время ×%d" % (1 if main.fast else 25), func() -> void:
+			main.toggle_fast()
+			open_admin())
+	_text(v, "Добавить в инвентарь", 15).add_theme_color_override("font_color", Color("#9aa0b4"))
+	var hg := _buttons(v)
+	var pick := OptionButton.new()
+	var ids := []
+	for t in Farm.TOOLS:
+		ids.append("tool:" + t)
+	for c in Farm.CROPS:
+		ids.append("seed:" + c["key"])
+	for c in Farm.CROPS:
+		ids.append("prod:" + c["key"])
+	for r in Farm.RES:
+		ids.append("res:" + r)
+	for id in ids:
+		pick.add_item(Farm.item_info(id)["name"])
+	hg.add_child(pick)
+	var count := SpinBox.new()
+	count.min_value = 1
+	count.max_value = 999
+	count.value = 10
+	hg.add_child(count)
+	_button(hg, "Добавить", func() -> void: main.farmnet.request("give", [ids[pick.selected], int(count.value)]))
+	_button(_buttons(v), "Закрыть (H)", close_dialog)
 
 
 ## Ящик для продажи: урожай кладут сюда, деньги приходят наутро.

@@ -42,6 +42,9 @@ var pending_act: Variant = null
 var day := 1
 var minutes := 7.0 * 60.0
 var fast := false
+var time_frozen := false
+var _save_t := 0.0
+var _late_warned := false
 var yaw := 0.0
 var dist := 18.0
 var cam_target := Vector3.ZERO
@@ -97,10 +100,17 @@ func _ready() -> void:
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 	_update_camera(1.0)
 	_update_light(true)
+	if not farmnet.load_game():
+		hud.call_deferred("open_intro")
+	else:
+		hud.toast("С возвращением! День %d." % day)
 
 
 func _process(delta: float) -> void:
 	minutes += delta * GAME_MIN_PER_SEC * time_speed()
+	if minutes >= 23.0 * 60.0 and not _late_warned:
+		_late_warned = true
+		hud.toast("Уже 23:00. Пора домой спать." if loc_id == "farm" else "Уже 23:00. Пора возвращаться домой.")
 	if minutes >= 24.0 * 60.0:
 		# в полночь день кончается сам; новый день объявляет хозяин игры
 		minutes = 24.0 * 60.0 - 0.01
@@ -124,6 +134,10 @@ func _process(delta: float) -> void:
 	world.tick(delta)
 	_net_tick(delta)
 	hud.refresh()
+	_save_t += delta
+	if _save_t >= 20.0:
+		_save_t = 0.0
+		farmnet.save_game()
 
 
 # ---------- дни и время ----------
@@ -133,11 +147,57 @@ func season_text() -> String:
 
 
 func time_speed() -> int:
-	return FAST if fast else 1
+	return 0 if time_frozen else (FAST if fast else 1)
 
 
 func toggle_fast() -> void:
 	fast = not fast
+
+
+## Админ-панель: сразу перейти на день d (без ночи: ничего не растёт и не вянет).
+func admin_set_day(d: int) -> void:
+	if not farmnet.is_host():
+		return
+	d = maxi(1, d)
+	var snow := farmnet.farm.snow if Location.season_id(d) == "winter" else false
+	farmnet._all("net_set_day", [d, snow])
+
+
+func admin_set_time(m: float) -> void:
+	if not farmnet.is_host():
+		return
+	minutes = m
+	_late_warned = m >= 23.0 * 60.0
+	_send_clock()
+
+
+## Сохраниться перед закрытием игры (и когда телефон сворачивает приложение).
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		if farmnet:
+			farmnet.save_game()
+
+
+## После игры у друга: свой мир из своего сохранения (или новый, если сохранения нет).
+func load_own_world() -> void:
+	farmnet.farm = FarmNet.Farm.new()
+	farmnet.my_inv = FarmNet.Farm.new_inventory()
+	farmnet.farm.inv = {1: farmnet.my_inv}
+	farmnet.my_water = FarmNet.Farm.CAN_CAP
+	Location._cache.clear()
+	if not farmnet.load_game():
+		day = 1
+		minutes = 360.0
+		enter_location("farm")
+	hud.refresh_farm()
+
+
+## Начать игру заново: новый огород, нетронутые карты, стартовые инвентари.
+func restart_game() -> void:
+	if not farmnet.is_host():
+		return
+	farmnet.restart()
+	_late_warned = false
 
 
 ## Кнопка «+ день» для проверки: ночь проходит сразу, растения растут.
@@ -218,6 +278,7 @@ func enter_location(id: String, from: String = "") -> void:
 ## Утро: все просыпаются у дома, растения подросли, ящик заплатил.
 func on_new_day(morning: Dictionary, note: String) -> void:
 	minutes = 6.0 * 60.0
+	_late_warned = false
 	day = farmnet.farm.day
 	# утром все просыпаются дома
 	_travel = null
@@ -376,6 +437,8 @@ func _unhandled_input(e: InputEvent) -> void:
 			hud.select_slot(9)
 		elif e.keycode == KEY_I or e.keycode == KEY_TAB:
 			hud.open_inventory()
+		elif e.keycode == KEY_H:
+			hud.open_admin()
 
 
 func _ground_point(screen: Vector2) -> Variant:
@@ -582,6 +645,8 @@ func host_game() -> void:
 func join_game(ip: String) -> void:
 	if ip == "":
 		ip = "127.0.0.1"
+	# свой мир сохраняем: пока играем у друга, он не меняется, и после отключения вернёмся в него
+	farmnet.save_game()
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_client(ip, PORT)
 	if err != OK:
