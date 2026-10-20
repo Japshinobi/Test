@@ -53,7 +53,9 @@
 | всё, что меняет мир или работает у двоих | `knowledge/decisions/network.md` |
 | формат карт, каталога, сохранения, атласа | `knowledge/decisions/data.md` |
 | камера, свет, масштаб, время, устройство кода | `knowledge/decisions/architecture.md` |
-| рисунки, палитра, стиль | `knowledge/style/pixel-art.md` |
+| рисунки, палитра, стиль, что в 3D, а что спрайтом | `knowledge/style/pixel-art.md` |
+| новый или переделанный 3D-объект (постройка, обстановка) | `knowledge/recipes/3d-object.md` |
+| что владелец уже решил (по датам и темам) | `knowledge/owner-decisions.md` |
 | перед любой задачей — известные ошибки | `knowledge/lessons.md` |
 | сборка APK | `android/README.md` |
 

@@ -86,6 +86,9 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 		if d.get("model", "") == "well":
 			_well(o, season == "winter", snow)
 			continue
+		if d.get("model", "") in ["bin", "mailbox", "sign", "signpost", "barrier"]:
+			_prop(o, d, size, snow)
+			continue
 		if not d.has("sprite") or not map.in_season(o):
 			continue    # служебные метки (выход, старт игрока) и объекты не своего сезона
 		var sprite_name := sprite_for(o, look, snow, market_open)
@@ -793,6 +796,131 @@ func _tent(root: Node3D, entry: Dictionary, w: float, dp: float, who: String, sn
 		entry["trader_sprite"] = _trader(root, who, Vector3(w / 2.0, 0.3, z1 - 0.15))
 	entry["open_node"] = open
 	entry["closed_node"] = closed
+
+
+# ---------- мелкие постройки: ящик для продажи, почтовый ящик, табличка, указатель, шлагбаумы ----------
+
+func _prop(o: Dictionary, d: Dictionary, size: Vector2i, snow: bool) -> void:
+	var root := Node3D.new()
+	root.name = String(o["id"]).capitalize()
+	# начало координат — середина занятых клеток на земле
+	root.position = Vector3(o["x"] + size.x / 2.0, 0, o["y"] + size.y / 2.0)
+	content.add_child(root)
+	var wood := _mat("counter", _counter())
+	var post := _mat("post", _post())
+	var cap := _mat("snowroof", _snow_roof())
+	var st: SurfaceTool
+	match String(d["model"]):
+		"bin":
+			# сундук: доски, тёмные железные полосы, крышка чуть шире
+			st = _surface()
+			_box(st, Vector3(-0.4, 0, -0.27), Vector3(0.4, 0.42, 0.27))
+			_add_mesh(root, st, _mat("planks", _planks()))
+			st = _surface()
+			_box(st, Vector3(-0.44, 0.42, -0.31), Vector3(0.44, 0.52, 0.31))
+			_add_mesh(root, st, cap if snow else wood)
+			st = _surface()
+			for bx in [-0.3, 0.24]:
+				_box(st, Vector3(bx, 0, -0.285), Vector3(bx + 0.06, 0.53, 0.285))
+			_add_mesh(root, st, _mat("iron", _img(4, 4, Color("#4b4b52"))))
+			st = _surface()
+			_box(st, Vector3(-0.05, 0.3, 0.27), Vector3(0.05, 0.42, 0.3))
+			_add_mesh(root, st, _mat("brass", _img(4, 4, Color("#f0bf45"))))
+		"mailbox":
+			st = _surface()
+			_box(st, Vector3(-0.05, 0, -0.05), Vector3(0.05, 0.85, 0.05))
+			_add_mesh(root, st, post)
+			st = _surface()
+			_box(st, Vector3(-0.3, 0.85, -0.2), Vector3(0.3, 1.18, 0.2))
+			_add_mesh(root, st, _mat("mailbox", _mailbox()))
+			if snow:
+				st = _surface()
+				_box(st, Vector3(-0.31, 1.18, -0.21), Vector3(0.31, 1.22, 0.21))
+				_add_mesh(root, st, cap)
+			# флажок сбоку: поднят — почта есть (пока писем нет, флажок просто стоит)
+			st = _surface()
+			_box(st, Vector3(0.3, 0.92, 0.0), Vector3(0.33, 1.32, 0.03))
+			_add_mesh(root, st, _mat("brass", _img(4, 4, Color("#f0bf45"))))
+			st = _surface()
+			_box(st, Vector3(0.3, 1.2, 0.03), Vector3(0.33, 1.32, 0.17))
+			_add_mesh(root, st, _mat("red", _img(4, 4, Color("#e0402c"))))
+		"sign":
+			st = _surface()
+			for px in [-0.32, 0.26]:
+				_box(st, Vector3(px, 0, -0.03), Vector3(px + 0.06, 0.62, 0.03))
+			_add_mesh(root, st, post)
+			st = _surface()
+			_box(st, Vector3(-0.45, 0.55, -0.04), Vector3(0.45, 1.05, 0.03))
+			_add_mesh(root, st, _mat("sign_board", _sign_board()))
+			if snow:
+				st = _surface()
+				_box(st, Vector3(-0.46, 1.05, -0.05), Vector3(0.46, 1.09, 0.04))
+				_add_mesh(root, st, cap)
+		"signpost":
+			st = _surface()
+			_box(st, Vector3(-0.06, 0, -0.06), Vector3(0.06, 1.7, 0.06))
+			_add_mesh(root, st, post)
+			# стрелки на все четыре стороны: север — деревня, запад — рынок, восток — ферма, юг — домой
+			var arrows := [[PI / 2.0, 1.5], [PI, 1.25], [0.0, 1.0], [-PI / 2.0, 0.75]]
+			for ar in arrows:
+				var arm := Node3D.new()
+				arm.rotation.y = ar[0]
+				root.add_child(arm)
+				st = _surface()
+				_box(st, Vector3(0.06, ar[1], -0.03), Vector3(0.62, ar[1] + 0.18, 0.03))
+				_box(st, Vector3(0.62, ar[1] + 0.03, -0.025), Vector3(0.7, ar[1] + 0.15, 0.025))
+				_add_mesh(arm, st, _mat("sign_board", _sign_board()))
+			if snow:
+				st = _surface()
+				_box(st, Vector3(-0.07, 1.7, -0.07), Vector3(0.07, 1.74, 0.07))
+				_add_mesh(root, st, cap)
+		"barrier":
+			# два серых столба и полосатая перекладина между ними — вдоль длинной стороны
+			var along_x := size.x >= size.y
+			var half := (maxf(size.x, size.y) / 2.0) - 0.2
+			st = _surface()
+			for k in [-1.0, 1.0]:
+				var c := Vector3(k * half, 0, 0) if along_x else Vector3(0, 0, k * half)
+				_box(st, c + Vector3(-0.08, 0, -0.08), c + Vector3(0.08, 0.95, 0.08))
+			_add_mesh(root, st, _mat("barrier_post", _img(4, 4, Color("#5a5a5a"))))
+			st = _surface()
+			if along_x:
+				_box(st, Vector3(-half, 0.72, -0.05), Vector3(half, 0.86, 0.05))
+			else:
+				_box(st, Vector3(-0.05, 0.72, -half), Vector3(0.05, 0.86, half))
+			_add_mesh(root, st, _mat("barrier_bar", _barrier_bar()))
+			if snow:
+				st = _surface()
+				for k in [-1.0, 1.0]:
+					var c2 := Vector3(k * half, 0, 0) if along_x else Vector3(0, 0, k * half)
+					_box(st, c2 + Vector3(-0.09, 0.95, -0.09), c2 + Vector3(0.09, 0.99, 0.09))
+				_add_mesh(root, st, cap)
+
+
+## Синий почтовый ящик с прорезью.
+static func _mailbox() -> Image:
+	var img := _img(16, 16, Color("#3d6fd6"))
+	img.fill_rect(Rect2i(0, 0, 16, 1), Color("#6f98f0"))
+	img.fill_rect(Rect2i(0, 15, 16, 1), Color("#284a9a"))
+	img.fill_rect(Rect2i(4, 6, 8, 1), Color("#1c2f6a"))
+	return img
+
+
+## Доска таблички и стрелок указателя: дерево и тёмные строчки «текста».
+static func _sign_board() -> Image:
+	var img := _img(16, 8, Color("#a97c50"))
+	img.fill_rect(Rect2i(0, 0, 16, 1), Color("#c99a66"))
+	img.fill_rect(Rect2i(0, 7, 16, 1), Color("#6e4b2c"))
+	img.fill_rect(Rect2i(2, 2, 11, 1), Color("#5e3b1f"))
+	img.fill_rect(Rect2i(2, 4, 8, 1), Color("#5e3b1f"))
+	return img
+
+
+## Красно-белые полосы шлагбаума.
+static func _barrier_bar() -> Image:
+	var img := _img(16, 16, Color("#d6455a"))
+	img.fill_rect(Rect2i(0, 0, 8, 16), Color("#f2e6bf"))
+	return img
 
 
 # ---------- фонтан и колодец ----------
