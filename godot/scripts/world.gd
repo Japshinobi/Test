@@ -29,8 +29,8 @@ var _drops := {}          # id -> {node, from, to, t, key}
 var _cell_sprites := {}   # клетка, где стоит объект -> его спрайт (чтобы убрать срубленное)
 var _shake := {}          # спрайт -> сколько ещё качаться
 var _shops := []          # прилавки: {sprite, name} — открыты или закрыты по часам рынка
-var _fountains := []      # фонтаны: {sprite, frames}
-var _fountain_t := 0.0
+var _small_waters := []   # вода в фонтанах: {mat, frames} — кадры меняются, как в пруду
+var _small_water_t := 0.0
 var _snow := false
 var _day := 1
 var _trod_tex := {}       # картинка протоптанной клетки по названию земли под снегом
@@ -58,7 +58,7 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 	_plots.clear()
 	_drops.clear()
 	_shops.clear()
-	_fountains.clear()
+	_small_waters.clear()
 	_cell_sprites.clear()
 	_shake.clear()
 	var snow := Location.snow_cover(day)
@@ -80,6 +80,12 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 		if d.get("model", "") == "stall" or d.get("model", "") == "tent":
 			_shop(o, d, size, snow, market_open)
 			continue
+		if d.get("model", "") == "fountain":
+			_fountain(o, size, season == "winter", snow)
+			continue
+		if d.get("model", "") == "well":
+			_well(o, season == "winter", snow)
+			continue
 		if not d.has("sprite") or not map.in_season(o):
 			continue    # служебные метки (выход, старт игрока) и объекты не своего сезона
 		var sprite_name := sprite_for(o, look, snow, market_open)
@@ -90,8 +96,6 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 		_cell_sprites[Vector2i(o["x"], o["y"])] = sp
 		if d.get("shop", false):
 			_shops.append({"sprite": sp, "obj": o})
-		if o["id"] == "fountain":
-			_fountains.append({"sprite": sp, "frames": _fountain_frames(sprite_name, season == "winter")})
 
 	# цветы растут на клетках «трава с цветами», где ничего не стоит
 	if not snow and season != "winter":
@@ -229,17 +233,6 @@ func set_market_open(open: bool) -> void:
 			s["sprite"].region_rect = Rect2(atlas.rect(name))
 
 
-## Кадры фонтана: сам фонтан с водой поверх, 12 кадров (или один замёрзший).
-func _fountain_frames(base: String, ice: bool) -> Array:
-	var frames := []
-	var r := atlas.rect(base)
-	for f in (["fountainwater_ice"] if ice else range(12).map(func(i): return "fountainwater_%d" % i)):
-		var img := atlas.image.get_region(r)
-		img.blend_rect(atlas.image, atlas.rect(f), Vector2i.ZERO)
-		frames.append(ImageTexture.create_from_image(img))
-	return frames
-
-
 ## Цвет дневного света. Спрайты не освещаются солнцем, поэтому подкрашиваем их сами.
 func set_tint(c: Color) -> void:
 	_tint = c
@@ -353,14 +346,12 @@ func tick(delta: float) -> void:
 			_shake.erase(sp)
 		else:
 			sp.position.x = base + sin(_shake[sp] * 60.0) * 0.06
-	if not _fountains.is_empty():
-		_fountain_t += delta
-		var f := int(_fountain_t / 0.185)
-		for fo in _fountains:
-			var sp: Sprite3D = fo["sprite"]
-			var frames: Array = fo["frames"]
-			sp.region_enabled = false
-			sp.texture = frames[f % frames.size()]
+	if not _small_waters.is_empty():
+		_small_water_t += delta
+		var f := int(_small_water_t / 0.3)
+		for sw in _small_waters:
+			var frames: Array = sw["frames"]
+			sw["mat"].albedo_texture = frames[f % frames.size()]
 	var now := Time.get_ticks_msec() / 1000.0
 	for id in _drops:
 		var d: Dictionary = _drops[id]
@@ -802,6 +793,199 @@ func _tent(root: Node3D, entry: Dictionary, w: float, dp: float, who: String, sn
 		entry["trader_sprite"] = _trader(root, who, Vector3(w / 2.0, 0.3, z1 - 0.15))
 	entry["open_node"] = open
 	entry["closed_node"] = closed
+
+
+# ---------- фонтан и колодец ----------
+
+## Фонтан на рыночной площади: круглая каменная чаша с водой, столб с верхней чашей и струи.
+## Зимой вода замёрзшая и струй нет.
+func _fountain(o: Dictionary, size: Vector2i, winter: bool, snow: bool) -> void:
+	var root := Node3D.new()
+	root.name = "Fountain"
+	root.position = Vector3(o["x"] + size.x / 2.0, 0, o["y"] + size.y / 2.0)
+	content.add_child(root)
+	var r := minf(size.x, size.y) / 2.0 - 0.05
+	var stone := _mat("stone", _stone())
+	var rim := _mat("snowroof", _snow_roof()) if snow else _mat("stone_light", _stone_light())
+	# нижняя чаша: стенка и верхний край
+	var st := _surface()
+	_ring_wall(st, r, 0.0, 0.42, 20)
+	_ring_wall(st, r - 0.24, 0.12, 0.42, 20)
+	_add_mesh(root, st, stone)
+	st = _surface()
+	_ring_top(st, r, r - 0.24, 0.42, 20)
+	_add_mesh(root, st, rim)
+	_water_disc(root, r - 0.24, 0.33, winter)
+	# столб и верхняя чаша
+	st = _surface()
+	_ring_wall(st, 0.17, 0.0, 1.25, 8)
+	_ring_wall(st, 0.5, 1.12, 1.3, 14)
+	_add_mesh(root, st, stone)
+	st = _surface()
+	_ring_top(st, 0.5, 0.38, 1.3, 14)
+	_disc(st, 0.5, 1.12, 14, true)
+	_add_mesh(root, st, rim)
+	_water_disc(root, 0.38, 1.26, winter)
+	if winter:
+		return
+	# струи: из верхней чаши во все стороны вниз и фонтанчик вверх посередине
+	root.add_child(_jets(Vector3(0, 1.32, 0), 0.45, Vector3(0, 1.0, 0), 2.0, 1.8, 0.8, 56))
+	root.add_child(_jets(Vector3(0, 1.34, 0), 0.03, Vector3(0, 1, 0), 0.0, 3.2, 0.5, 16))
+
+
+## Колодец: каменное кольцо с водой, два столба, двускатная крыша, ворот с верёвкой и ведром.
+func _well(o: Dictionary, winter: bool, snow: bool) -> void:
+	var root := Node3D.new()
+	root.name = "Well"
+	root.position = Vector3(o["x"] + 0.5, 0, o["y"] + 0.5)
+	content.add_child(root)
+	var st := _surface()
+	_ring_wall(st, 0.43, 0.0, 0.55, 12)
+	_ring_wall(st, 0.3, 0.2, 0.55, 12)
+	_add_mesh(root, st, _mat("stone", _stone()))
+	st = _surface()
+	_ring_top(st, 0.43, 0.3, 0.55, 12)
+	_add_mesh(root, st, _mat("snowroof", _snow_roof()) if snow else _mat("stone_light", _stone_light()))
+	_water_disc(root, 0.3, 0.32, winter, true)
+	st = _surface()
+	for px in [-0.45, 0.37]:
+		_box(st, Vector3(px, 0, -0.04), Vector3(px + 0.08, 1.42, 0.04))
+	_box(st, Vector3(-0.37, 1.0, -0.03), Vector3(0.37, 1.06, 0.03))
+	_add_mesh(root, st, _mat("post", _post()))
+	st = _surface()
+	_box(st, Vector3(-0.01, 0.62, -0.01), Vector3(0.01, 1.0, 0.01))
+	_add_mesh(root, st, _mat("rope", _img(4, 4, Color("#d9c9a0"))))
+	st = _surface()
+	_box(st, Vector3(-0.07, 0.5, -0.07), Vector3(0.07, 0.64, 0.07))
+	_add_mesh(root, st, _mat("bucket", _img(4, 4, Color("#8b8b8b"))))
+	# крыша: конёк вдоль X, скаты на север и юг
+	var y0 := 1.28
+	var y1 := 1.68
+	var w := 0.62
+	var dz := 0.5
+	var slope := Vector2(dz, y1 - y0).length()
+	st = _surface()
+	quad(st, Vector3(-w, y1, 0), Vector3(w, y1, 0), Vector3(w, y0, dz), Vector3(-w, y0, dz), Rect2(0, 0, 2 * w, slope), Vector3(0, dz, y1 - y0).normalized())
+	quad(st, Vector3(w, y1, 0), Vector3(-w, y1, 0), Vector3(-w, y0, -dz), Vector3(w, y0, -dz), Rect2(0, 0, 2 * w, slope), Vector3(0, dz, -(y1 - y0)).normalized())
+	_add_mesh(root, st, _mat("snowroof", _snow_roof()) if snow else _mat("well_roof", _well_roof()))
+	st = _surface()
+	tri(st, Vector3(-w + 0.05, y0, dz - 0.05), Vector3(-w + 0.05, y0, -dz + 0.05), Vector3(-w + 0.05, y1, 0), Vector2(0, 0.4), Vector2(1, 0.4), Vector2(0.5, 0), Vector3.LEFT)
+	tri(st, Vector3(w - 0.05, y0, -dz + 0.05), Vector3(w - 0.05, y0, dz - 0.05), Vector3(w - 0.05, y1, 0), Vector2(0, 0.4), Vector2(1, 0.4), Vector2(0.5, 0), Vector3.RIGHT)
+	_add_mesh(root, st, _mat("planks", _planks()))
+
+
+## Стенка кольца (как труба без крышки): радиус r, от высоты y0 до y1, n граней.
+func _ring_wall(st: SurfaceTool, r: float, y0: float, y1: float, n: int) -> void:
+	var edge := TAU * r / n
+	for i in n:
+		var a0 := TAU * i / n
+		var a1 := TAU * (i + 1) / n
+		var p0 := Vector3(cos(a0) * r, 0, sin(a0) * r)
+		var p1 := Vector3(cos(a1) * r, 0, sin(a1) * r)
+		var nrm := (p0 + p1).normalized()
+		quad(st, p1 + Vector3(0, y1, 0), p0 + Vector3(0, y1, 0), p0 + Vector3(0, y0, 0), p1 + Vector3(0, y0, 0),
+			Rect2(i * edge, 0, edge, y1 - y0), nrm)
+
+
+## Верх кольца между радиусами r0 (внешний) и r1 (внутренний) на высоте y.
+func _ring_top(st: SurfaceTool, r0: float, r1: float, y: float, n: int) -> void:
+	for i in n:
+		var a0 := TAU * i / n
+		var a1 := TAU * (i + 1) / n
+		var o0 := Vector3(cos(a0) * r0, y, sin(a0) * r0)
+		var o1 := Vector3(cos(a1) * r0, y, sin(a1) * r0)
+		var i0 := Vector3(cos(a0) * r1, y, sin(a0) * r1)
+		var i1 := Vector3(cos(a1) * r1, y, sin(a1) * r1)
+		quad(st, o0, o1, i1, i0, Rect2(o0.x, o0.z, 0.25, r0 - r1), Vector3.UP)
+
+
+## Круг (дно или поверхность) радиуса r на высоте y; текстура ложится по X и Z, 16 пикселей на клетку.
+func _disc(st: SurfaceTool, r: float, y: float, n: int, down := false) -> void:
+	for i in n:
+		var a0 := TAU * i / n
+		var a1 := TAU * (i + 1) / n
+		var c := Vector3(0, y, 0)
+		var p0 := Vector3(cos(a0) * r, y, sin(a0) * r)
+		var p1 := Vector3(cos(a1) * r, y, sin(a1) * r)
+		# лицевая сторона — та, с которой вершины идут по часовой стрелке
+		if down:
+			tri(st, c, p1, p0, Vector2(c.x, c.z), Vector2(p1.x, p1.z), Vector2(p0.x, p0.z), Vector3.DOWN)
+		else:
+			tri(st, c, p0, p1, Vector2(c.x, c.z), Vector2(p0.x, p0.z), Vector2(p1.x, p1.z), Vector3.UP)
+
+
+## Вода в чаше: те же кадры воды (или лёд), что у пруда. dark — тёмная вода глубоко в колодце.
+func _water_disc(parent: Node3D, r: float, y: float, winter: bool, dark := false) -> void:
+	var frames := []
+	for f in (1 if winter else 4):
+		var img := Image.create(T * 2, T * 2, false, Image.FORMAT_RGBA8)
+		for k in 4:
+			var tile := "ice_%d" % k if winter else "water_%d_%d" % [k, f]
+			img.blit_rect(atlas.image, atlas.rect(tile), Vector2i((k % 2) * T, (k / 2) * T))
+		if dark:
+			img.adjust_bcs(0.55, 1.0, 1.0)
+		frames.append(ImageTexture.create_from_image(img))
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = frames[0]
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat.uv1_scale = Vector3(0.5, 0.5, 1)
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.roughness = 0.25
+	mat.metallic_specular = 0.7
+	var st := _surface()
+	_disc(st, r, y, 16)
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	if frames.size() > 1:
+		_small_waters.append({"mat": mat, "frames": frames})
+
+
+## Струи воды: светлые квадратики вылетают из кольца радиуса r вверх и в стороны и падают.
+func _jets(at: Vector3, r: float, dir: Vector3, spread_out: float, speed: float, life: float, amount: int) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.position = at
+	p.amount = amount
+	p.lifetime = life
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING if r > 0.05 else CPUParticles3D.EMISSION_SHAPE_POINT
+	p.emission_ring_axis = Vector3.UP
+	p.emission_ring_radius = r
+	p.emission_ring_inner_radius = r * 0.9
+	p.emission_ring_height = 0.0
+	p.direction = dir
+	p.spread = 6.0
+	p.initial_velocity_min = speed * 0.85
+	p.initial_velocity_max = speed
+	p.radial_accel_min = spread_out
+	p.radial_accel_max = spread_out * 1.4
+	p.gravity = Vector3(0, -7.5, 0)
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(0.06, 0.09)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color("#d8ecff")
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mesh.material = mat
+	p.mesh = mesh
+	return p
+
+
+static func _stone_light() -> Image:
+	var img := _img(16, 16, Color("#a6a6a6"))
+	for i in 8:
+		img.set_pixel((i * 7 + 2) % 16, (i * 5 + 3) % 16, Color("#8a8a8a"))
+	img.fill_rect(Rect2i(0, 15, 16, 1), Color("#808080"))
+	return img
+
+
+static func _well_roof() -> Image:
+	var img := _img(16, 16, Color("#7a4a26"))
+	for row in 4:
+		img.fill_rect(Rect2i(0, row * 4, 16, 1), Color("#9a6a3a"))
+		img.fill_rect(Rect2i(0, row * 4 + 3, 16, 1), Color("#5a3418"))
+	return img
 
 
 ## Ящик с товаром на стойке: деревянный ящик, сверху горка товара.

@@ -25,7 +25,7 @@
 		{"id": "twigs", "name": "Ветки", "group": "Природа", "sprite": "twigs", "snow": true, "shadow": false},
 		{"id": "stump", "name": "Пень", "group": "Природа", "sprite": "stump", "snow": true},
 		{"id": "house", "name": "Дом деда", "group": "Постройки", "sprite": "house0", "snow": true, "size": [4, 3], "door": [2, 2], "model": "house"},
-		{"id": "well", "name": "Колодец", "group": "Постройки", "sprite": "well", "snow": true},
+		{"id": "well", "name": "Колодец", "group": "Постройки", "sprite": "well", "model": "well", "snow": true},
 		{"id": "bin", "name": "Ящик для продажи", "group": "Постройки", "sprite": "bin", "snow": true},
 		{"id": "mailbox", "name": "Почтовый ящик", "group": "Постройки", "sprite": "mailbox", "snow": true},
 		{"id": "sign", "name": "Табличка", "group": "Постройки", "sprite": "sign", "snow": true, "props": ["text"]},
@@ -39,7 +39,7 @@
 		{"id": "stallside", "name": "Прилавок боком", "group": "Рынок", "sprite": "stallside", "model": "stall", "facing": "east", "snow": true, "shop": true, "size": [3, 4], "props": ["trader"], "traders": ["berry", ""]},
 		{"id": "stallback", "name": "Прилавок задом", "group": "Рынок", "sprite": "stallback", "model": "stall", "facing": "north", "snow": true, "size": [4, 2]},
 		{"id": "tent", "name": "Шатёр торговца", "group": "Рынок", "sprite": "tent", "model": "tent", "facing": "south", "snow": true, "shop": true, "size": [4, 4], "props": ["trader"], "traders": ["any"]},
-		{"id": "fountain", "name": "Фонтан", "group": "Рынок", "sprite": "fountain", "snow": true, "size": [3, 3]},
+		{"id": "fountain", "name": "Фонтан", "group": "Рынок", "sprite": "fountain", "model": "fountain", "snow": true, "size": [3, 3]},
 		{"id": "exit", "name": "Выход в локацию", "group": "Служебное", "block": false, "color": "#a040e0", "props": ["to"]},
 		{"id": "spawn", "name": "Старт игрока", "group": "Служебное", "block": false, "color": "#ffffff"}
 	]
