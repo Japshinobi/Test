@@ -45,7 +45,7 @@
 | Задача | Читать |
 |---|---|
 | новая локация, правка карты, выходы, новый вид земли или объект | `knowledge/recipes/location.md` |
-| предметы, культуры, цены, инструменты, `design/items.xlsx` | `knowledge/recipes/item.md` |
+| предметы, культуры, цены, инструменты, `design/items.xlsx`, `design/crops.xlsx` | `knowledge/recipes/item.md` |
 | окна, кнопки, тексты справки, панель, инвентарь | `knowledge/recipes/ui.md` |
 | НПЦ, новый торговец | `knowledge/recipes/npc.md` (черновик) |
 | диалоги, реплики, тексты табличек | `knowledge/recipes/dialogue.md` (черновик) |
