@@ -49,7 +49,7 @@
 | окна, кнопки, тексты справки, панель, инвентарь | `knowledge/recipes/ui.md` |
 | НПЦ, новый торговец | `knowledge/recipes/npc.md` (черновик) |
 | диалоги, реплики, тексты табличек | `knowledge/recipes/dialogue.md` (черновик) |
-| события, праздники, погода, календарь, часы рынка | `knowledge/recipes/event.md` (черновик) |
+| события, праздники, погода, календарь, часы рынка, `design/weather.xlsx` | `knowledge/recipes/event.md` (черновик) |
 | всё, что меняет мир или работает у двоих | `knowledge/decisions/network.md` |
 | формат карт, каталога, сохранения, атласа | `knowledge/decisions/data.md` |
 | камера, свет, масштаб, время, устройство кода | `knowledge/decisions/architecture.md` |
