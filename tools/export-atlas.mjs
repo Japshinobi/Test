@@ -78,6 +78,8 @@ const result = await page.evaluate(() => {
     obj('fountain' + sfx, S.sprite('fountain', 0, 0, L));
   }
   for (let st = 0; st < 3; st++) obj(`sunflower_${st}`, S.sprite('sunflower', st, 0, SUMMER));
+  /* торговцы отдельно от прилавков: в 3D-прилавке стоят спрайтом за стойкой (рисунок по пояс, точка опоры — низ) */
+  for (const who of ['fruit', 'veg', 'berry', 'any']) add(`trader_${who}`, canvas(12, 17, g => S.drawTrader(S.painter(g, 0, 0), 1, 3, who, false)), 6, 17, 17);
   /* вода фонтана: 12 кадров по кругу (и замёрзшая) — рисуются поверх фонтана */
   const fo = S.sprite('fountain', 0, 0, SUMMER);
   for (let f = 0; f < 12; f++) add(`fountainwater_${f}`, canvas(48, 56, g => S.drawFountainWater(g, 0, 0, f * 2.222 / 12, false)), fo.ax, fo.ay, fo.fy);

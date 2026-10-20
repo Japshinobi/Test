@@ -53,6 +53,7 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 	content.name = "Map"
 	add_child(content)
 	sprites.clear()
+	_mats.clear()
 	_flowers.clear()
 	_plots.clear()
 	_drops.clear()
@@ -75,6 +76,9 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 		var size := Location.object_size(o["id"])
 		if d.get("model", "") == "house":
 			_house(o["x"], o["y"], size, d)
+			continue
+		if d.get("model", "") == "stall" or d.get("model", "") == "tent":
+			_shop(o, d, size, snow, market_open)
 			continue
 		if not d.has("sprite") or not map.in_season(o):
 			continue    # служебные метки (выход, старт игрока) и объекты не своего сезона
@@ -143,7 +147,7 @@ func update_cell(x: int, y: int) -> void:
 			old.free()
 			dict.erase(cell)
 	var o: Variant = map.object_at(x, y)
-	if o != null and o["x"] == x and o["y"] == y and Location.def(o["id"]).has("sprite"):
+	if o != null and o["x"] == x and o["y"] == y and Location.def(o["id"]).has("sprite") and not Location.def(o["id"]).has("model"):
 		var size := Location.object_size(o["id"])
 		var d := Location.def(o["id"])
 		var sp := _obj(sprite_for(o, _look, _snow, _market_open), Vector3(x + size.x / 2.0, 0, y + size.y - 0.5), d.get("shadow", true))
@@ -217,6 +221,9 @@ func set_market_open(open: bool) -> void:
 		return
 	_market_open = open
 	for s in _shops:
+		if s.has("open_node"):
+			_show_shop(s, open)
+			continue
 		var name := sprite_for(s["obj"], _look, _snow, open)
 		if atlas.has(name):
 			s["sprite"].region_rect = Rect2(atlas.rect(name))
@@ -625,6 +632,274 @@ func _house(x: int, y: int, size: Vector2i, d: Dictionary) -> void:
 	st = _surface()
 	_box(st, Vector3(HX1 - 1.3, 2.4, zm - 0.9), Vector3(HX1 - 0.75, 3.85, zm - 0.4))
 	_add_mesh(house, st, _material(_stone()))
+
+
+# ---------- прилавки и шатёр торговца ----------
+# Объёмные, как дом: простые формы с пиксельными текстурами (16 пикселей на клетку). Торговец — отдельный спрайт
+# за стойкой (trader_<кто> в атласе), виден, только когда рынок открыт. Цвета навесов и товара — как в game/sprites.js.
+
+const AWNING := {"fruit": ["#c7432f", "#f2e6bf"], "veg": ["#3f8a3a", "#f2e6bf"], "berry": ["#7a3aa8", "#f2e6bf"],
+	"any": ["#5a3a8a", "#ffd24a"], "empty": ["#8a7a6a", "#b8ab98"]}
+const GOODS := {"fruit": ["#cf2f2f", "#8fd65a", "#f2d14a"], "veg": ["#e8832a", "#3f9a3a", "#e0402c", "#c49a62"],
+	"berry": ["#d63b45", "#8a5a33", "#9a4ad6"], "any": ["#efe0b4", "#c99a66", "#efe0b4"]}
+var _mats := {}
+
+
+## Прилавок или шатёр на своём месте карты. Модель строится лицом на юг в клетках (ширина W, глубина D),
+## потом поворачивается лицом туда, куда указывает "facing" в каталоге.
+func _shop(o: Dictionary, d: Dictionary, size: Vector2i, snow: bool, market_open: bool) -> void:
+	var facing := String(d.get("facing", "south"))
+	var across := facing == "south" or facing == "north"
+	var w := size.x if across else size.y
+	var dp := size.y if across else size.x
+	var root := Node3D.new()
+	root.name = String(o["id"]).capitalize()
+	content.add_child(root)
+	var x0 := float(o["x"])
+	var z0 := float(o["y"])
+	match facing:
+		"north":
+			root.position = Vector3(x0 + w, 0, z0 + dp)
+			root.rotation.y = PI
+		"east":
+			root.position = Vector3(x0, 0, z0 + w)
+			root.rotation.y = PI / 2.0
+		"west":
+			root.position = Vector3(x0 + dp, 0, z0)
+			root.rotation.y = -PI / 2.0
+		_:
+			root.position = Vector3(x0, 0, z0)
+	var who := String(o.get("trader", ""))
+	var entry := {"obj": o, "who": who}
+	if d.get("model", "") == "tent":
+		_tent(root, entry, float(w), float(dp), who, snow)
+	else:
+		_stall(root, entry, float(w), float(dp), who if who != "" else "empty", snow)
+	if d.get("shop", false):
+		_shops.append(entry)
+		_show_shop(entry, market_open)
+
+
+## Открыто: торговец и товар на месте. Закрыто (или торговца нет): ставни.
+func _show_shop(entry: Dictionary, open: bool) -> void:
+	var on: bool = open and entry["who"] != ""
+	entry["open_node"].visible = on
+	entry["closed_node"].visible = not on
+	if entry.get("trader_sprite") != null:
+		entry["trader_sprite"].visible = on
+
+
+func _stall(root: Node3D, entry: Dictionary, w: float, dp: float, who: String, snow: bool) -> void:
+	var colors: Array = AWNING[who]
+	# задняя стенка, столбы, стойка
+	var st := _surface()
+	_box(st, Vector3(0.1, 0, 0.2), Vector3(w - 0.1, 1.9, 0.34))
+	_add_mesh(root, st, _mat("stall_back", _stall_back()))
+	st = _surface()
+	for px in [0.1, w - 0.26]:
+		_box(st, Vector3(px, 0, 0.18), Vector3(px + 0.16, 2.95, 0.34))
+		_box(st, Vector3(px, 0, dp - 0.42), Vector3(px + 0.16, 2.62, dp - 0.26))
+	_add_mesh(root, st, _mat("post", _post()))
+	st = _surface()
+	_box(st, Vector3(0.1, 0, dp - 0.78), Vector3(w - 0.1, 0.9, dp - 0.26))
+	_add_mesh(root, st, _mat("counter", _counter()))
+	# навес: скат от задней стенки к стойке и фестоны спереди. Поднят высоко: камера смотрит сверху,
+	# и под низким навесом торговца не было бы видно
+	var back := Vector3(0, 2.97, 0.08)
+	var front := Vector3(0, 2.6, dp - 0.12)
+	var length := Vector2(front.z - back.z, back.y - front.y).length()
+	var n := Vector3(0, front.z - back.z, back.y - front.y).normalized()
+	st = _surface()
+	quad(st, Vector3(-0.1, back.y, back.z), Vector3(w + 0.1, back.y, back.z), Vector3(w + 0.1, front.y, front.z), Vector3(-0.1, front.y, front.z),
+		Rect2(0, 0, w + 0.2, length), n)
+	_add_mesh(root, st, _mat("snowroof", _snow_roof()) if snow else _mat("awning_" + who, _stripes(colors)))
+	st = _surface()
+	quad(st, Vector3(-0.1, front.y, front.z), Vector3(w + 0.1, front.y, front.z), Vector3(w + 0.1, front.y - 0.3, front.z), Vector3(-0.1, front.y - 0.3, front.z),
+		Rect2(0, 0, w + 0.2, 1), Vector3.BACK)
+	_add_mesh(root, st, _mat("valance_" + who, _valance(colors), true))
+	# закрыто: ставни над стойкой; у пустого места — табличка на стойке
+	var closed := Node3D.new()
+	root.add_child(closed)
+	st = _surface()
+	quad(st, Vector3(0.26, 2.3, dp - 0.5), Vector3(w - 0.26, 2.3, dp - 0.5), Vector3(w - 0.26, 0.9, dp - 0.5), Vector3(0.26, 0.9, dp - 0.5),
+		Rect2(0, 0, w - 0.52, 1.4), Vector3.BACK)
+	_add_mesh(closed, st, _mat("shutters", _shutters()))
+	if who == "empty":
+		st = _surface()
+		var cx := w / 2.0
+		quad(st, Vector3(cx - 0.62, 0.68, dp - 0.25), Vector3(cx + 0.62, 0.68, dp - 0.25), Vector3(cx + 0.62, 0.25, dp - 0.25), Vector3(cx - 0.62, 0.25, dp - 0.25),
+			Rect2(0, 0, 1, 1), Vector3.BACK)
+		_add_mesh(closed, st, _mat("plaque", _plaque()))
+	# открыто: ящики с товаром по краям стойки и торговец посередине
+	var open := Node3D.new()
+	root.add_child(open)
+	if who != "empty":
+		for i in 3:
+			_crate(open, Vector3(0.35 + i * 0.42, 0.9, dp - 0.52), GOODS[who][i % GOODS[who].size()])
+			_crate(open, Vector3(w - 0.77 - i * 0.42, 0.9, dp - 0.52), GOODS[who][(i + 1) % GOODS[who].size()])
+		entry["trader_sprite"] = _trader(root, who, Vector3(w / 2.0, 0.55, dp - 0.86))
+	entry["open_node"] = open
+	entry["closed_node"] = closed
+
+
+func _tent(root: Node3D, entry: Dictionary, w: float, dp: float, who: String, snow: bool) -> void:
+	var colors: Array = AWNING["any"]
+	var x0 := 0.3
+	var x1 := w - 0.3
+	var z0 := 0.3
+	var z1 := dp - 0.9
+	var h := 1.7
+	var dx0 := w / 2.0 - 0.7
+	var dx1 := w / 2.0 + 0.7
+	var dh := 1.45
+	# стены в полоску, спереди — вход
+	var st := _surface()
+	quad(st, Vector3(x1, h, z0), Vector3(x0, h, z0), Vector3(x0, 0, z0), Vector3(x1, 0, z0), Rect2(0, 0, x1 - x0, h), Vector3.FORWARD)
+	quad(st, Vector3(x0, h, z0), Vector3(x0, h, z1), Vector3(x0, 0, z1), Vector3(x0, 0, z0), Rect2(0, 0, z1 - z0, h), Vector3.LEFT)
+	quad(st, Vector3(x1, h, z1), Vector3(x1, h, z0), Vector3(x1, 0, z0), Vector3(x1, 0, z1), Rect2(0, 0, z1 - z0, h), Vector3.RIGHT)
+	quad(st, Vector3(x0, h, z1), Vector3(dx0, h, z1), Vector3(dx0, 0, z1), Vector3(x0, 0, z1), Rect2(0, 0, dx0 - x0, h), Vector3.BACK)
+	quad(st, Vector3(dx1, h, z1), Vector3(x1, h, z1), Vector3(x1, 0, z1), Vector3(dx1, 0, z1), Rect2(0, 0, x1 - dx1, h), Vector3.BACK)
+	quad(st, Vector3(dx0, h, z1), Vector3(dx1, h, z1), Vector3(dx1, dh, z1), Vector3(dx0, dh, z1), Rect2(0, 0, dx1 - dx0, h - dh), Vector3.BACK)
+	_add_mesh(root, st, _mat("tent_wall", _stripes(colors, 4)))
+	# внутри темно
+	st = _surface()
+	quad(st, Vector3(dx0, dh, z1 - 0.7), Vector3(dx1, dh, z1 - 0.7), Vector3(dx1, 0, z1 - 0.7), Vector3(dx0, 0, z1 - 0.7), Rect2(0, 0, 1, 1), Vector3.BACK)
+	_add_mesh(root, st, _mat("dark", _img(4, 4, Color("#2a1c3a"))))
+	# крыша-пирамида с флажком
+	var e := 0.25
+	var apex := Vector3(w / 2.0, 3.25, (z0 + z1) / 2.0)
+	var c := [Vector3(x0 - e, h, z0 - e), Vector3(x1 + e, h, z0 - e), Vector3(x1 + e, h, z1 + e), Vector3(x0 - e, h, z1 + e)]
+	st = _surface()
+	for i in 4:
+		var a: Vector3 = c[i]
+		var b: Vector3 = c[(i + 1) % 4]
+		var side := a.distance_to(b)
+		var nrm := (b - a).cross(apex - a).normalized()
+		if nrm.y < 0:
+			nrm = -nrm
+		tri(st, a, b, apex, Vector2(0, 2), Vector2(side, 2), Vector2(side / 2.0, 0), nrm)
+	_add_mesh(root, st, _mat("snowroof", _snow_roof()) if snow else _mat("tent_roof", _stripes(colors, 4)))
+	st = _surface()
+	_box(st, apex + Vector3(-0.03, -0.1, -0.03), apex + Vector3(0.03, 0.45, 0.03))
+	_add_mesh(root, st, _mat("post", _post()))
+	st = _surface()
+	quad(st, apex + Vector3(0.03, 0.45, 0), apex + Vector3(0.36, 0.38, 0), apex + Vector3(0.36, 0.22, 0), apex + Vector3(0.03, 0.29, 0), Rect2(0, 0, 1, 1), Vector3.BACK)
+	_add_mesh(root, st, _mat("flag", _img(4, 4, Color("#ffd24a"))))
+	# стойка перед входом
+	st = _surface()
+	_box(st, Vector3(0.7, 0, dp - 0.75), Vector3(w - 0.7, 0.75, dp - 0.3))
+	_add_mesh(root, st, _mat("counter", _counter()))
+	var closed := Node3D.new()
+	root.add_child(closed)
+	st = _surface()
+	quad(st, Vector3(dx0, dh, z1 + 0.01), Vector3(dx1, dh, z1 + 0.01), Vector3(dx1, 0, z1 + 0.01), Vector3(dx0, 0, z1 + 0.01), Rect2(0, 0, dx1 - dx0, dh), Vector3.BACK)
+	_add_mesh(closed, st, _mat("tent_flap", _stripes([colors[0], colors[0]], 4)))
+	var open := Node3D.new()
+	root.add_child(open)
+	if who != "":
+		for i in 5:
+			_crate(open, Vector3(0.85 + i * 0.47, 0.75, dp - 0.65), GOODS["any"][i % GOODS["any"].size()])
+		entry["trader_sprite"] = _trader(root, who, Vector3(w / 2.0, 0.3, z1 - 0.15))
+	entry["open_node"] = open
+	entry["closed_node"] = closed
+
+
+## Ящик с товаром на стойке: деревянный ящик, сверху горка товара.
+func _crate(parent: Node3D, at: Vector3, color: String) -> void:
+	var st := _surface()
+	_box(st, at, at + Vector3(0.34, 0.16, 0.26))
+	_add_mesh(parent, st, _mat("crate", _img(4, 4, Color("#7a5230"))))
+	st = _surface()
+	_box(st, at + Vector3(0.05, 0.16, 0.04), at + Vector3(0.29, 0.24, 0.22))
+	_add_mesh(parent, st, _mat("goods_" + color, _img(4, 4, Color(color))))
+
+
+func _trader(root: Node3D, who: String, at: Vector3) -> Sprite3D:
+	var name := "trader_" + who
+	if not atlas.has(name):
+		push_warning("Нет спрайта " + name)
+		return null
+	var sp := atlas.make_sprite(name)
+	sp.position = at
+	sp.scale = Vector3(1, STRETCH, 1)
+	sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sp.modulate = _tint
+	root.add_child(sp)
+	sprites.append(sp)
+	return sp
+
+
+## Один материал на текстуру за постройку локации (их много одинаковых: ящики, столбы).
+func _mat(key: String, img: Image, cutout := false) -> StandardMaterial3D:
+	if not _mats.has(key):
+		_mats[key] = _material(img, cutout)
+	return _mats[key]
+
+
+## Полосы навеса или шатра: две краски по очереди, каждая шириной half пикселей.
+static func _stripes(colors: Array, half := 8) -> Image:
+	var img := _img(half * 2, 16, Color(colors[0]))
+	img.fill_rect(Rect2i(half, 0, half, 16), Color(colors[1]))
+	return img
+
+
+## Фестоны навеса: полосы с зубчатым нижним краем (прозрачное отсекается).
+static func _valance(colors: Array) -> Image:
+	var img := _img(16, 5, Color(0, 0, 0, 0))
+	for k in 2:
+		var c := Color(colors[k])
+		var x := k * 8
+		img.fill_rect(Rect2i(x, 0, 8, 3), c)
+		img.fill_rect(Rect2i(x + 1, 3, 6, 1), c)
+		img.fill_rect(Rect2i(x + 2, 4, 4, 1), c)
+	img.fill_rect(Rect2i(0, 0, 16, 1), Color("#3a2a1f"))
+	return img
+
+
+static func _snow_roof() -> Image:
+	var img := _img(16, 16, Color("#f4f8ff"))
+	for i in 10:
+		img.set_pixel((i * 7 + 3) % 16, (i * 5 + 1) % 16, Color("#d8e4f0"))
+	return img
+
+
+static func _stall_back() -> Image:
+	var img := _img(16, 16, Color("#8b6a45"))
+	for x in [0, 8]:
+		img.fill_rect(Rect2i(x, 0, 1, 16), Color("#6f5235"))
+	return img
+
+
+static func _post() -> Image:
+	var img := _img(4, 16, Color("#6e4b2c"))
+	img.fill_rect(Rect2i(0, 0, 1, 16), Color("#8a5a33"))
+	return img
+
+
+## Стойка из досок: светлая верхняя доска, тёмные швы.
+static func _counter() -> Image:
+	var img := _img(16, 16, Color("#a97c50"))
+	for row in 4:
+		var y := row * 4
+		img.fill_rect(Rect2i(0, y, 16, 1), Color("#c99a66"))
+		img.fill_rect(Rect2i(0, y + 3, 16, 1), Color("#6e4b2c"))
+		img.fill_rect(Rect2i((row * 5 + 6) % 16, y, 1, 4), Color("#6e4b2c"))
+	return img
+
+
+static func _shutters() -> Image:
+	var img := _img(16, 16, Color("#6f5235"))
+	for y in range(1, 16, 3):
+		img.fill_rect(Rect2i(0, y, 16, 1), Color("#5a4228"))
+	return img
+
+
+## Табличка «место свободно» на пустом прилавке.
+static func _plaque() -> Image:
+	var img := _img(20, 7, Color("#f2e6bf"))
+	img.fill_rect(Rect2i(2, 2, 16, 1), Color("#8a6a3a"))
+	img.fill_rect(Rect2i(2, 4, 12, 1), Color("#8a6a3a"))
+	return img
 
 
 func _box(st: SurfaceTool, lo: Vector3, hi: Vector3) -> void:

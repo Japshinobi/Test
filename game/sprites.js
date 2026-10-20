@@ -989,5 +989,5 @@ function applyLight(g, w, h, min) {
 
 
 return {T, C, CROPS, BOXES, FC, SEASONS, SEASON_DAYS, seasonOf, lookFor, drawSnow, drawTrodden, drawFallen, drawSite, drawField, drawBridge, drawDitch, drawCobbles, drawFountainWater, clearCache, hash, painter, drawGrass, drawPath, drawFlowers, drawDirt, drawLocked, drawFence, drawTree, drawBush, drawWell, drawHouse, drawMarket, cropStage, drawCrop, drawSoil, drawWater, drawProduce, iconCanvas, drawPlayer,
-  decoKind, fenceMask, sprite, silhouette, sunAt, castShadow, tintAt, applyLight};
+  decoKind, fenceMask, sprite, silhouette, sunAt, castShadow, tintAt, applyLight, drawTrader};
 })();
