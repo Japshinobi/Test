@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}canvas{display:block;width:100vw;height:100vh}</style></head>
+<body><canvas id="canvas" tabindex="0"></canvas>
+<script type="module">
+import createModule from './godot.web.template_release.wasm32.nothreads.js';
+import { getDefaultContext } from './emnapi.mjs';
+window.__log = [];
+const log = (...a) => { window.__log.push(a.join(' ')); console.log(...a); };
+try {
+  const canvas = document.getElementById('canvas');
+  const Module = await createModule({ canvas, locateFile: p => './' + p, print: t => log('OUT', t), printErr: t => log('ERR', t) });
+  const root = new URLSearchParams(location.search).get('root') || '/';
+  const files = await (await fetch('/files.json')).json();
+  for (const f of files) {
+    const buf = new Uint8Array(await (await fetch('/proj/' + f + location.search)).arrayBuffer());
+    Module.copyToFS(root + f, buf);
+  }
+  log('staged', files.length);
+  Module.initConfig({ canvas, canvasResizePolicy: 2, args: (new URLSearchParams(location.search).get('args') || '').split(' ').filter(Boolean) });
+  const mod = Module.emnapiInit({ context: getDefaultContext() });
+  log('init ok', Object.keys(mod).slice(0, 20).join(','));
+  const godot = mod.getGodot();
+  window.__godot = godot; window.__mod = mod;
+  log('godot', typeof godot, godot && Object.getOwnPropertyNames(Object.getPrototypeOf(godot)).join(','));
+  let frames = 0;
+  const step = () => { try { if (!mod._C(godot, 8470)) { frames++; window.__frames = frames; requestAnimationFrame(step); } else log('quit'); } catch (e) { log('iter error', e.stack || e); } };
+  requestAnimationFrame(step);
+} catch (e) { log('boot error', e.stack || e); }
+</script></body></html>
