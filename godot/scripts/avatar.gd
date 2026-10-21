@@ -3,7 +3,19 @@ extends Node3D
 ## Какой стороной его показать, зависит и от того, куда он идёт, и от того, откуда смотрит камера.
 
 const Atlas := preload("res://scripts/atlas.gd")
+const Palette := preload("res://scripts/palette.gd")
 const STRETCH := 1.25
+## Рисунки героев из PixelLab: холст 64×64, 32 пикселя на клетку (герой ростом около двух клеток).
+const PX := 32
+const SIZE := 64
+## Восемь сторон по кругу, начиная с «лицом к камере» и дальше по часовой (вправо по экрану).
+const DIRS := ["south", "south-east", "east", "north-east", "north", "north-west", "west", "south-west"]
+## Персонажи: папка с основой (8 рисунков <сторона>.png) и слои одежды поверх неё по порядку.
+## Слой — папка <основа>/<слой>/ с теми же 8 рисунками, прозрачными везде, кроме вещи.
+const CHARS := {
+	"vanya": {"dir": "res://assets/chars/vanya", "layers": ["jacket"]},
+	"nina": {"dir": "res://assets/chars/nina", "layers": []},
+}
 
 var atlas: Atlas
 var sprite: Sprite3D
@@ -17,11 +29,19 @@ var net_pos := Vector3.ZERO
 var _anim := 0.0
 
 static var _blob_mat: StandardMaterial3D
+## Готовые полосы из 8 сторон по персонажам: {"vanya": {"tex": ..., "ay": ...}}.
+static var _strips := {}
 
 
 func setup(p_atlas: Atlas, friend: bool, title: String) -> void:
 	atlas = p_atlas
-	sprite = atlas.make_sprite("player_down_0")
+	sprite = Sprite3D.new()
+	sprite.region_enabled = true
+	sprite.pixel_size = 1.0 / PX
+	sprite.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	sprite.shaded = false
 	sprite.scale = Vector3(1, STRETCH, 1)
 	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(sprite)
@@ -51,7 +71,10 @@ func setup(p_atlas: Atlas, friend: bool, title: String) -> void:
 
 
 func set_look(friend: bool, title: String) -> void:
-	sprite.texture = atlas.friend_texture if friend else atlas.texture
+	var strip := _strip("nina" if friend else "vanya")
+	sprite.texture = strip["tex"]
+	# ноги — на земле: середина нижнего ряда ступней в точке персонажа
+	sprite.offset = Vector2(0, float(strip["ay"]) - SIZE * 0.5)
 	label.text = title
 	label.modulate = Color("#c8f5b0") if friend else Color("#ffe9a8")
 
@@ -66,22 +89,59 @@ func tick(delta: float, cam_yaw: float) -> void:
 			position = net_pos
 		else:
 			position = position.lerp(net_pos, 1.0 - exp(-12.0 * delta))
-	_anim = _anim + delta if moving else 0.0
-	var frame := int(_anim / 0.16) % 2 if moving else 0
-	sprite.region_rect = Rect2(atlas.rect("player_%s_%d" % [_side(cam_yaw), frame]))
+	# анимации ходьбы пока нет — персонаж стоит в одной позе
+	sprite.region_rect = Rect2(_side(cam_yaw) * SIZE, 0, SIZE, SIZE)
 
 
-## Какой стороной персонаж повёрнут к камере: лицом, спиной, левым или правым боком.
-## Рисунков пока четыре; в RO их восемь (с диагоналями) — их можно будет добавить из PixelLab.
-func _side(cam_yaw: float) -> String:
+## Какой стороной персонаж повёрнут к камере — номер в DIRS (0 — лицом, 2 — правым боком, 4 — спиной).
+func _side(cam_yaw: float) -> int:
 	var d := Vector3(sin(face), 0, cos(face))
 	var fwd := Vector3(-sin(cam_yaw), 0, -cos(cam_yaw))
 	var right := Vector3(cos(cam_yaw), 0, -sin(cam_yaw))
-	var ff := d.dot(fwd)
-	var fr := d.dot(right)
-	if absf(fr) > absf(ff):
-		return "right" if fr > 0 else "left"
-	return "up" if ff > 0 else "down"
+	var a := atan2(d.dot(right), -d.dot(fwd))
+	return posmod(roundi(a / (PI / 4.0)), 8)
+
+
+## Полоса из 8 сторон персонажа: основа, на неё по порядку слои одежды; тёмный внешний контур
+## перекрашен в ряд outline палитры «2d». Собирается один раз на персонажа.
+static func _strip(who: String) -> Dictionary:
+	if _strips.has(who):
+		return _strips[who]
+	var info: Dictionary = CHARS[who]
+	var img := Image.create(SIZE * DIRS.size(), SIZE, false, Image.FORMAT_RGBA8)
+	var bottom := 0
+	for i in DIRS.size():
+		var one := Atlas.load_image("%s/%s.png" % [info["dir"], DIRS[i]])
+		for layer in info["layers"]:
+			var path := "%s/%s/%s.png" % [info["dir"], layer, DIRS[i]]
+			if not FileAccess.file_exists(path) and not ResourceLoader.exists(path):
+				push_warning("Нет слоя " + path)
+				continue
+			var top := Atlas.load_image(path)
+			one.blend_rect(top, Rect2i(0, 0, SIZE, SIZE), Vector2i.ZERO)
+		_outline(one)
+		bottom = maxi(bottom, one.get_used_rect().end.y)
+		img.blit_rect(one, Rect2i(0, 0, SIZE, SIZE), Vector2i(i * SIZE, 0))
+	_strips[who] = {"tex": ImageTexture.create_from_image(img), "ay": bottom}
+	return _strips[who]
+
+
+## Тёмные пиксели на краю силуэта (рядом с прозрачным) — в цвет контура палитры.
+static func _outline(img: Image) -> void:
+	var line := Palette.col("2d", "outline", 2)
+	var edge: Array[Vector2i] = []
+	for y in SIZE:
+		for x in SIZE:
+			var c := img.get_pixel(x, y)
+			if c.a == 0.0 or maxf(c.r, maxf(c.g, c.b)) > 0.25:
+				continue
+			for n: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var q := Vector2i(x, y) + n
+				if q.x < 0 or q.y < 0 or q.x >= SIZE or q.y >= SIZE or img.get_pixelv(q).a == 0.0:
+					edge.append(Vector2i(x, y))
+					break
+	for p in edge:
+		img.set_pixelv(p, line)
 
 
 static func _blob_material() -> StandardMaterial3D:

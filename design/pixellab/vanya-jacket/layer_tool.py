@@ -8,10 +8,13 @@ def dist(a, b):
     if (a[3] > 0) != (b[3] > 0): return 999
     return math.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3)))
 
-def extract(base_p, dressed_p, out_p, strong=40, weak=15, min_part=6):
+def extract(base_p, dressed_p, out_p, strong=40, weak=15, min_part=6, rows=None):
     base = Image.open(base_p).convert('RGBA'); dr = Image.open(dressed_p).convert('RGBA')
     b, d = base.load(), dr.load(); W, H = base.size
     D = {(x, y): dist(b[x, y], d[x, y]) for y in range(H) for x in range(W)}
+    # зона слота: для тела (куртка) — ряды от плеч до бёдер, ноги и голову не трогать
+    if rows:
+        D = {p: (v if rows[0] <= p[1] <= rows[1] else 0) for p, v in D.items()}
     mask = {p for p, v in D.items() if v > strong}
     # убрать мелкие кусочки (связные области меньше min_part пикселей)
     seen, keep = set(), set()
