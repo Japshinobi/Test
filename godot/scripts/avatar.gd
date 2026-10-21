@@ -4,7 +4,8 @@ extends Node3D
 
 const Atlas := preload("res://scripts/atlas.gd")
 const Palette := preload("res://scripts/palette.gd")
-const STRETCH := 1.25
+## Для рисунков PixelLab: при камере под 50° пиксели на экране выходят квадратными, как на рисунке.
+const STRETCH := 1.5
 ## Рисунки героев из PixelLab: холст 64×64, 32 пикселя на клетку (герой ростом около двух клеток).
 const PX := 32
 const SIZE := 64
@@ -73,6 +74,7 @@ func setup(p_atlas: Atlas, friend: bool, title: String) -> void:
 func set_look(friend: bool, title: String) -> void:
 	var strip := _strip("nina" if friend else "vanya")
 	sprite.texture = strip["tex"]
+	sprite.material_override = Atlas.upright(strip["tex"])
 	# ноги — на земле: середина нижнего ряда ступней в точке персонажа
 	sprite.offset = Vector2(0, float(strip["ay"]) - SIZE * 0.5)
 	label.text = title

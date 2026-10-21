@@ -8,6 +8,46 @@ var image: Image
 var texture: ImageTexture
 var sprites := {}
 
+## Спрайты стоят на экране ровно, как в Ragnarok Online: без наклона по краям экрана и с одинаковыми
+## пропорциями везде. Обычный спрайт «повёрнут к камере по вертикали» (BILLBOARD_FIXED_Y), и из-за
+## перспективы по краям экрана заваливается наружу, а внизу сплющивается. Здесь картинка
+## выводится параллельно экрану; высота — как у вертикального спрайта в середине экрана
+## (растяжение STRETCH × косинус наклона камеры). Глубина берётся от вертикального спрайта,
+## чтобы голова не уходила в стену или дерево за спиной. Подкраска (modulate) работает как раньше.
+const UPRIGHT := """
+shader_type spatial;
+render_mode unshaded, cull_disabled;
+uniform sampler2D tex : source_color, filter_nearest;
+
+void vertex() {
+	if (!OUTPUT_IS_SRGB) {
+		COLOR.rgb = mix(pow((COLOR.rgb + vec3(0.055)) * (1.0 / 1.055), vec3(2.4)), COLOR.rgb * (1.0 / 12.92), lessThan(COLOR.rgb, vec3(0.04045)));
+	}
+	vec3 anchor = (VIEW_MATRIX * vec4(MODEL_MATRIX[3].xyz, 1.0)).xyz;
+	vec3 up = (VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
+	float x = VERTEX.x * length(MODEL_MATRIX[0].xyz);
+	float y = VERTEX.y * length(MODEL_MATRIX[1].xyz);
+	vec3 standing = anchor + vec3(x, 0.0, 0.0) + up * y;
+	vec3 screen = anchor + vec3(x, y * up.y, 0.0);
+	if (PROJECTION_MATRIX[3][3] < 0.5) {
+		screen *= standing.z / screen.z;
+	} else {
+		screen.z = standing.z;
+	}
+	POSITION = PROJECTION_MATRIX * vec4(screen, 1.0);
+}
+
+void fragment() {
+	vec4 c = texture(tex, UV) * COLOR;
+	if (c.a < 0.5) {
+		discard;
+	}
+	ALBEDO = c.rgb;
+}
+"""
+static var _upright_shader: Shader
+static var _upright_mats := {}
+
 
 func _init() -> void:
 	image = load_image("res://assets/atlas.png")
@@ -55,5 +95,20 @@ func make_sprite(name: String) -> Sprite3D:
 	sp.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
 	sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	sp.shaded = false
+	sp.material_override = upright(texture)
 	return sp
+
+
+## Материал «спрайт стоит на экране ровно» для картинки (один на картинку).
+static func upright(tex: Texture2D) -> ShaderMaterial:
+	if _upright_mats.has(tex):
+		return _upright_mats[tex]
+	if _upright_shader == null:
+		_upright_shader = Shader.new()
+		_upright_shader.code = UPRIGHT
+	var m := ShaderMaterial.new()
+	m.shader = _upright_shader
+	m.set_shader_parameter("tex", tex)
+	_upright_mats[tex] = m
+	return m
 

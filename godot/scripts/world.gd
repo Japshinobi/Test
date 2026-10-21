@@ -272,6 +272,7 @@ func sync_plot(x: int, y: int, p: Variant) -> void:
 	# земля лежит на земле: плоский спрайт, освещается солнцем как сама земля
 	var soil := atlas.make_sprite("soilwet" if p["watered"] else "soil")
 	soil.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	soil.material_override = null
 	soil.axis = Vector3.AXIS_Y
 	soil.centered = true
 	soil.offset = Vector2.ZERO
