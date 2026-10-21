@@ -4,7 +4,7 @@ extends RefCounted
 
 const Palette := preload("res://scripts/palette.gd")
 const T := 16   # пикселей чернового рисунка в одной клетке
-## Рубашка Тёмы — ряд палитры cloth_red (оттенки 1 и 2), рубашку друга перекрашиваем в cloth_green,
+## Рубашка Вани — ряд палитры cloth_red (оттенки 1 и 2), рубашку друга перекрашиваем в cloth_green,
 ## чтобы игроков не путать. В game/sprites.js рубашка нарисована теми же цветами палитры.
 
 var image: Image

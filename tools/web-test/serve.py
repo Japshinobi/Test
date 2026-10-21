@@ -35,7 +35,7 @@ class H(http.server.SimpleHTTPRequestHandler):
                       .replace('var err := peer.', 'var err = peer.'))
             from urllib.parse import urlparse, parse_qs
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
-            if 'friend' in q: src = src.replace('me.setup(atlas, false, "Тёма")', 'me.setup(atlas, true, "Друг")')
+            if 'friend' in q: src = src.replace('me.setup(atlas, false, "Ваня")', 'me.setup(atlas, true, "Нина")')
             if 'amb' in q: src = src.replace('env.ambient_light_energy = 0.4', 'env.ambient_light_energy = ' + q['amb'])
             if 'sun' in q: src = src.replace('sun.light_energy = 0.15 *', 'sun.light_energy = ' + q['sun'] + ' *')
             if 'farmtest' in q and self.path.split('?')[0].endswith('/main.gd'):

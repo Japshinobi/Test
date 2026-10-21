@@ -1,5 +1,5 @@
 extends Node3D
-## Проба RO-стиля: огород в 3D, Тёма — спрайт, камера вращается вокруг него, можно играть вдвоём по сети.
+## Проба RO-стиля: огород в 3D, герой — спрайт, камера вращается вокруг него, можно играть вдвоём по сети.
 ## Всё создаётся из кода при запуске, поэтому сцена main.tscn почти пустая.
 
 const Location := preload("res://scripts/location.gd")
@@ -83,7 +83,7 @@ func _ready() -> void:
 
 	me = Avatar.new()
 	add_child(me)
-	me.setup(atlas, false, "Тёма")
+	me.setup(atlas, false, "Ваня")
 	me.position = spawn_point()
 	cam_target = me.position
 
@@ -227,7 +227,7 @@ func sfx(name_: String) -> void:
 	sound.play(name_)
 
 
-## Тёма ступил на новую клетку: зимой по свежему снегу остаются следы.
+## Герой ступил на новую клетку: зимой по свежему снегу остаются следы.
 func _step_on(cell: Vector2i) -> void:
 	if cell == _last_cell:
 		return
@@ -281,7 +281,7 @@ func market_open() -> bool:
 
 # ---------- переходы между локациями ----------
 
-## Тёма ступил на выход: экран темнеет, и он оказывается в соседней локации.
+## Герой ступил на выход: экран темнеет, и он оказывается в соседней локации.
 func _start_travel(to: String) -> void:
 	if not Location.exists(to):
 		hud.toast("Эта дорога пока никуда не ведёт.")
@@ -558,7 +558,7 @@ func _do_act(cell: Vector2i) -> void:
 	farmnet.act(cell)
 
 
-## Пробел: действие с клеткой, к которой Тёма повёрнут лицом.
+## Пробел: действие с клеткой, к которой герой повёрнут лицом.
 func _act_front() -> void:
 	var d := Vector2(sin(me.face), cos(me.face))
 	var step := Vector2i(signi(roundi(d.x)) if absf(d.x) > absf(d.y) else 0, 0 if absf(d.x) > absf(d.y) else signi(roundi(d.y)))
@@ -675,7 +675,7 @@ func _update_cursor(screen: Vector2) -> void:
 
 
 # ---------- игра вдвоём ----------
-# Один игрок создаёт игру (он «хозяин», у него Тёма), второй подключается по адресу (у него Друг в зелёной рубашке).
+# Один игрок создаёт игру (он «хозяин», у него Ваня), второй подключается по адресу (у него Нина; пока — Ваня в зелёной рубашке).
 # Каждый сам ходит своим персонажем и 20 раз в секунду сообщает другому, где он. Время и день ведёт хозяин.
 
 func net_mode() -> String:
@@ -715,7 +715,7 @@ func leave_game() -> void:
 	multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	_clear_remotes()
-	me.set_look(false, "Тёма")
+	me.set_look(false, "Ваня")
 	net_status = "Вы играете одни."
 
 
@@ -732,7 +732,7 @@ func _local_addresses() -> PackedStringArray:
 func _on_peer_connected(id: int) -> void:
 	farmnet.on_peer_connected(id)
 	if multiplayer.is_server():
-		net_status = "Друг подключился! Адрес игры: " + ", ".join(_local_addresses())
+		net_status = "Нина подключилась! Адрес игры: " + ", ".join(_local_addresses())
 
 
 func _on_peer_disconnected(id: int) -> void:
@@ -741,12 +741,12 @@ func _on_peer_disconnected(id: int) -> void:
 		remotes[id].queue_free()
 		remotes.erase(id)
 	if multiplayer.is_server():
-		net_status = "Друг отключился. Ждём снова, адрес: " + ", ".join(_local_addresses())
+		net_status = "Нина отключилась. Ждём снова, адрес: " + ", ".join(_local_addresses())
 
 
 func _on_connected() -> void:
-	me.set_look(true, "Друг")
-	net_status = "Подключено! Вы играете за Друга (зелёная рубашка)."
+	me.set_look(true, "Нина")
+	net_status = "Подключено! Вы играете за Нину (пока у неё временный рисунок)."
 
 
 func _on_connection_failed() -> void:
@@ -758,7 +758,7 @@ func _on_server_disconnected() -> void:
 	farmnet.on_lost_host()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	_clear_remotes()
-	me.set_look(false, "Тёма")
+	me.set_look(false, "Ваня")
 	net_status = "Хозяин игры отключился. Вы играете одни."
 
 
@@ -793,7 +793,7 @@ func net_state(pos: Vector3, p_face: float, p_moving: bool, p_loc: String) -> vo
 	if not remotes.has(id):
 		var a := Avatar.new()
 		add_child(a)
-		a.setup(atlas, id != 1, "Тёма" if id == 1 else "Друг")
+		a.setup(atlas, id != 1, "Ваня" if id == 1 else "Нина")
 		a.remote = true
 		a.position = pos
 		a.set_tint(tint_at(minutes))
