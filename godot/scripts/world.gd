@@ -6,6 +6,7 @@ extends Node3D
 const Location := preload("res://scripts/location.gd")
 const Atlas := preload("res://scripts/atlas.gd")
 const Farm := preload("res://scripts/farm.gd")
+const Palette := preload("res://scripts/palette.gd")
 
 const T := 16
 ## Камера смотрит сверху под углом, и стоячие спрайты кажутся приплюснутыми. Немного вытягиваем их вверх.
@@ -193,7 +194,7 @@ func hit_fx(x: int, y: int, kind: String) -> void:
 	if sp:
 		_shake[sp] = 0.22
 	var colors := {"chop": Color("#c99a66"), "mine": Color("#b8b8c0"), "mow": Color("#f5d33b"), "till": Color("#7a5236"), "water": Color("#9cc8f4")}
-	puff(Vector3(x + 0.5, 0.3, y + 0.5), colors.get(kind, Color.WHITE))
+	puff(Vector3(x + 0.5, 0.3, y + 0.5), Palette.snap(colors.get(kind, Color.WHITE), "2d"))
 
 
 ## Облачко пыли или брызг: несколько квадратиков разлетаются и падают.
@@ -1052,6 +1053,7 @@ func _water_disc(parent: Node3D, r: float, y: float, winter: bool, dark := false
 			img.blit_rect(atlas.image, atlas.rect(tile), Vector2i((k % 2) * T, (k / 2) * T))
 		if dark:
 			img.adjust_bcs(0.55, 1.0, 1.0)
+			img = Palette.quantize(img, "3d")
 		frames.append(ImageTexture.create_from_image(img))
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = frames[0]
@@ -1093,7 +1095,7 @@ func _jets(at: Vector3, r: float, dir: Vector3, spread_out: float, speed: float,
 	mesh.size = Vector2(0.06, 0.09)
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color("#d8ecff")
+	mat.albedo_color = Palette.col("2d", "water", 0)
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	mesh.material = mat
 	p.mesh = mesh
@@ -1239,6 +1241,9 @@ func _add_mesh(parent: Node3D, st: SurfaceTool, mat: Material) -> void:
 
 
 func _material(img: Image, cutout := false) -> StandardMaterial3D:
+	# текстуры построек рисуются кодом — притягиваем их к палитре «3d», как рисунки атласа
+	if img.get_width() * img.get_height() <= 4096:
+		img = Palette.quantize(img, "3d")
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = ImageTexture.create_from_image(img)
 	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST

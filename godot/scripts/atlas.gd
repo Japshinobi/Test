@@ -1,11 +1,11 @@
 extends RefCounted
-## Атлас спрайтов из браузерной версии (тот же, что в Unity; собирается скриптом unity/Tools~/export-atlas.mjs).
+## Атлас спрайтов (собирается скриптом tools/export-atlas.mjs из рисунков game/sprites.js).
 ## У каждого спрайта есть «точка опоры» (ax, ay) — место, которым он стоит на земле.
 
+const Palette := preload("res://scripts/palette.gd")
 const T := 16   # пикселей чернового рисунка в одной клетке
-## Цвета рубашки Тёмы и рубашки друга: второго игрока перекрашиваем, чтобы их не путать.
-const SHIRT := ["#c0563a", "#963f29"]
-const FRIEND_SHIRT := ["#4e9a52", "#35703c"]
+## Рубашка Тёмы — ряд палитры cloth_red (оттенки 1 и 2), рубашку друга перекрашиваем в cloth_green,
+## чтобы игроков не путать. В game/sprites.js рубашка нарисована теми же цветами палитры.
 
 var image: Image
 var texture: ImageTexture
@@ -65,8 +65,8 @@ func make_sprite(name: String) -> Sprite3D:
 
 func _recolor_friend() -> Image:
 	var img := image.duplicate() as Image
-	var from := [Color(SHIRT[0]).to_rgba32(), Color(SHIRT[1]).to_rgba32()]
-	var to := [Color(FRIEND_SHIRT[0]), Color(FRIEND_SHIRT[1])]
+	var from := [Palette.col("2d", "cloth_red", 1).to_rgba32(), Palette.col("2d", "cloth_red", 2).to_rgba32()]
+	var to := [Palette.col("2d", "cloth_green", 1), Palette.col("2d", "cloth_green", 2)]
 	for name in sprites:
 		if not String(name).begins_with("player_"):
 			continue

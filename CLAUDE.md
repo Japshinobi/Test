@@ -67,7 +67,7 @@
 - `world.gd` — 3D-картинка локации.
 - `location.gd` — карта и mods.
 - `hud.gd` — интерфейс.
-- `avatar.gd` — персонаж; `atlas.gd` — атлас; `sfx.gd` — звуки.
+- `avatar.gd` — персонаж; `atlas.gd` — атлас; `palette.gd` — палитры 3D и 2D (`data/palette.json`); `sfx.gd` — звуки.
 
 ## Как проверять изменения
 

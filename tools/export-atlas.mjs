@@ -19,7 +19,8 @@ const page = await browser.newPage();
 await page.setContent('<html><body></body></html>');
 await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'game/sprites.js'), 'utf8') });
 
-const result = await page.evaluate(() => {
+const PALETTES = JSON.parse(fs.readFileSync(path.join(root, 'godot/data/palette.json'), 'utf8'));
+const result = await page.evaluate((PAL) => {
   const S = window.OgorodSprites, T = 16, items = [];
   const canvas = (w, h, fn) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.imageSmoothingEnabled = false; fn(g); return c; };
   const add = (n, c, ax = 0, ay = 0, fy = c.height) => items.push({ n, c, ax, ay, fy });
@@ -87,6 +88,55 @@ const result = await page.evaluate(() => {
   for (const k of ['hoe', 'can', 'axe', 'pick', 'scythe', 'wood', 'stone']) add('icon_' + k, S.iconCanvas(k));
   for (const k of Object.keys(S.CROPS)) { add('seed_' + k, S.iconCanvas('seed', k)); add('prod_' + k, S.iconCanvas('prod', k)); }
 
+  /* палитры: земля, вода и всё, что в игре объёмное, — к палитре «3d», остальное (персонажи, растения, предметы) — к «2d».
+     Каждый пиксель притягивается к ближайшему по восприятию цвету (Lab) своей палитры. */
+  const IS_3D = /^(grass_|path_|site_|snow_|ice_|water_|trodden_|soil|field_|ditch_|cobbles_|bridge_|house|well|bin|mailbox|sign|barrier_|stall|tent_|fountain|rock|haystack|scarecrow)/;
+  const lab = ([r, g, b]) => {
+    const f = v => { v /= 255; return v > 0.04045 ? ((v + 0.055) / 1.055) ** 2.4 : v / 12.92; };
+    const R = f(r), G = f(g), B = f(b);
+    const X = (R * 0.4124 + G * 0.3576 + B * 0.1805) / 0.95047, Y = R * 0.2126 + G * 0.7152 + B * 0.0722, Z = (R * 0.0193 + G * 0.1192 + B * 0.9505) / 1.08883;
+    const h = t => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+    return [116 * h(Y) - 16, 500 * (h(X) - h(Y)), 200 * (h(Y) - h(Z))];
+  };
+  /* ряды палитры: цвет знает свой ряд и ступень (0 — самая светлая) */
+  const ramps = {};
+  for (const k of ['3d', '2d']) ramps[k] = Object.values(PAL[k]).map(r => r.map(hex => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)); return {c, l: lab(c)}; }));
+  const memo = {'3d': new Map(), '2d': new Map()};
+  const nearest = (k, key) => {
+    const m = memo[k];
+    if (m.has(key)) return m.get(key);
+    const L = lab([key >> 16, (key >> 8) & 255, key & 255]); let best = null, bd = Infinity;
+    ramps[k].forEach((r, ri) => r.forEach((p, si) => { const d = (L[0] - p.l[0]) ** 2 + (L[1] - p.l[1]) ** 2 + (L[2] - p.l[2]) ** 2; if (d < bd) { bd = d; best = {ri, si, L0: L[0]}; } }));
+    m.set(key, best); return best;
+  };
+  for (const it of items) {
+    const k = IS_3D.test(it.n) ? '3d' : '2d';
+    const g = it.c.getContext('2d'), im = g.getImageData(0, 0, it.c.width, it.c.height), d = im.data;
+    /* какие цвета есть в рисунке и сколько их */
+    const count = new Map();
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3]) { const key = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2]; count.set(key, (count.get(key) || 0) + 1); }
+    /* разные цвета рисунка, попавшие в одну ступень палитры, раздвигаем по ряду: светлее — выше, темнее — ниже,
+       чтобы узор (камни, травинки, блики) не слился в одно пятно */
+    const groups = new Map(), out = new Map();
+    for (const key of count.keys()) { const n = nearest(k, key), gk = n.ri * 100 + n.si; if (!groups.has(gk)) groups.set(gk, []); groups.get(gk).push({key, n}); }
+    for (const list of groups.values()) {
+      const ramp = ramps[k][list[0].n.ri], si = list[0].n.si;
+      if (list.length === 1) { out.set(list[0].key, ramp[si].c); continue; }
+      list.sort((a, b) => count.get(b.key) - count.get(a.key));
+      const main = list[0]; out.set(main.key, ramp[si].c);
+      const lighter = list.slice(1).filter(e => e.n.L0 >= main.n.L0).sort((a, b) => a.n.L0 - b.n.L0);
+      const darker = list.slice(1).filter(e => e.n.L0 < main.n.L0).sort((a, b) => b.n.L0 - a.n.L0);
+      lighter.forEach((e, j) => out.set(e.key, ramp[Math.max(0, si - 1 - j)].c));
+      darker.forEach((e, j) => out.set(e.key, ramp[Math.min(ramp.length - 1, si + 1 + j)].c));
+    }
+    for (let i = 0; i < d.length; i += 4) {
+      if (!d[i + 3]) continue;
+      const c = out.get((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
+      d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2];
+    }
+    g.putImageData(im, 0, 0);
+  }
+
   /* shelf packing with 1 px of empty space around every sprite */
   items.sort((a, b) => b.c.height - a.c.height);
   const AW = 2048; let x = 1, y = 1, shelf = 0;
@@ -105,7 +155,7 @@ const result = await page.evaluate(() => {
     png: atlas.toDataURL('image/png').split(',')[1],
     index: { width: AW, height: AH, sprites: items.map(it => ({ n: it.n, x: it.x, y: it.y, w: it.c.width, h: it.c.height, ax: it.ax, ay: it.ay, fy: it.fy })), shadowBoxes: boxes },
   };
-});
+}, PALETTES);
 await browser.close();
 fs.mkdirSync(out, { recursive: true });
 fs.writeFileSync(path.join(out, 'atlas.png'), Buffer.from(result.png, 'base64'));

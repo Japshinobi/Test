@@ -31,7 +31,7 @@
 
    > leafy deciduous tree, summer, Ragnarok Online style, soft shading, dark outline, transparent background
 
-6. **Палитра — по желанию.** Если PixelLab предложит ограничить цвета, можно загрузить `palette.png` из этой папки (48 цветов игры, превью — `palette-preview.png`, список — `palette.hex`). Если с палитрой стиль RO теряется — рисовать без неё; цвета я потом подгоню.
+6. **Палитра — по желанию.** Для персонажей, растений и предметов — `palette.png` (палитра 2D игры, список — `palette.hex`); для текстур построек и земли — `palette-3d.png` (`palette-3d.hex`). Наглядно с названиями — `design/palette-2d.png` и `design/palette-3d.png`. Если с палитрой стиль теряется — рисовать без неё: при сборке атласа цвета всё равно притянутся к палитре.
 
 ## Как отдать мне
 

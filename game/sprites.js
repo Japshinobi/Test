@@ -7,13 +7,13 @@ window.OgorodSprites = (() => {
 const T = 16;
 
 const C = {
-  grass:'#33a532', grassD:'#22802a', grassL:'#62d04e', farm:'#976b4b', farmD:'#7a5236', farmL:'#b0835c',
-  path:'#d6c27a', pathD:'#b9a35c', pathL:'#ecdc9c',
-  water:'#2650d8', waterD:'#1a37a0', waterL:'#6a98f4',
-  soil:'#6e4a30', soilD:'#553823', soilW:'#4a3020', soilWD:'#36220f',
-  fence:'#a97c50', fenceD:'#6e4b2c', fenceL:'#c99a66',
-  trunk:'#8a5a33', trunkD:'#5e3b1f', leaf:'#1fa31f', leafD:'#137013', leafL:'#4fd04f',
-  stone:'#808080', stoneD:'#5a5a5a', stoneL:'#a6a6a6', ink:'#0b0e22', coin:'#ffd24a'
+  grass:'#7cac4a', grassD:'#557f36', grassL:'#b6d66a', farm:'#b4885c', farmD:'#8e6844', farmL:'#d4ac7c',
+  path:'#e4cc94', pathD:'#ccb074', pathL:'#f4e4b4',
+  water:'#4a8cca', waterD:'#30609e', waterL:'#70b6e2',
+  soil:'#74543c', soilD:'#583c2c', soilW:'#543c2e', soilWD:'#402c22',
+  fence:'#b48452', fenceD:'#664228', fenceL:'#d8ac78',
+  trunk:'#8c6646', trunkD:'#664832', leaf:'#7aba4e', leafD:'#52923e', leafL:'#aada72',
+  stone:'#a4a0a0', stoneD:'#7e7a80', stoneL:'#ccc8c6', ink:'#1e1824', coin:'#fad252'
 };
 
 /* growth in game days; a season is 12 days. seasons: when it can grow (out of season it withers). regrow: days to the next harvest */
@@ -690,8 +690,8 @@ function iconCanvas(kind, k) {
 /* player: 16 x 24, feet on the bottom row */
 function drawPlayer(g, X, Y, face, frame) {
   const P = painter(g, X, Y);
-  const skin = '#f2c39b', skinD = '#d9a27a', hat = '#e3c069', hatD = '#b8953f', band = '#9c6b2f';
-  const shirt = '#c0563a', shirtD = '#963f29', over = '#3d5a8c', overD = '#2b4168', boot = '#4a2f1d', hair = '#7a4a22';
+  const skin = '#ffdabe', skinD = '#f2b696', hat = '#f2d272', hatD = '#caa24a', band = '#885632';
+  const shirt = '#e2625c', shirtD = '#ba4240', over = '#4c6ebe', overD = '#364c8e', boot = '#5e3a24', hair = '#6c442a';
   const side = face === 'left' || face === 'right', step = frame ? 1 : 0;
   /* legs and boots */
   if (side) {
@@ -713,11 +713,11 @@ function drawPlayer(g, X, Y, face, frame) {
   if (face === 'up') { P(4, 5, 8, 6, hair); P(5, 11, 6, 1, skinD); }
   else if (face === 'down') {
     P(11, 6, 1, 5, skinD); P(4, 5, 1, 3, hair); P(11, 5, 1, 3, hair); P(5, 5, 6, 1, hair);
-    P(6, 8, 1, 2, C.ink); P(9, 8, 1, 2, C.ink); P(7, 10, 2, 1, '#b5655a'); P(5, 9, 1, 1, '#eaa48a'); P(10, 9, 1, 1, '#eaa48a');
+    P(6, 8, 1, 2, C.ink); P(9, 8, 1, 2, C.ink); P(7, 10, 2, 1, '#ca8672'); P(5, 9, 1, 1, '#f2b696'); P(10, 9, 1, 1, '#f2b696');
   } else if (face === 'left') {
-    P(8, 5, 4, 5, hair); P(3, 8, 1, 2, skin); P(5, 8, 1, 2, C.ink); P(5, 10, 2, 1, '#b5655a'); P(9, 8, 1, 2, skinD);
+    P(8, 5, 4, 5, hair); P(3, 8, 1, 2, skin); P(5, 8, 1, 2, C.ink); P(5, 10, 2, 1, '#ca8672'); P(9, 8, 1, 2, skinD);
   } else {
-    P(4, 5, 4, 5, hair); P(12, 8, 1, 2, skin); P(10, 8, 1, 2, C.ink); P(9, 10, 2, 1, '#b5655a'); P(6, 8, 1, 2, skinD);
+    P(4, 5, 4, 5, hair); P(12, 8, 1, 2, skin); P(10, 8, 1, 2, C.ink); P(9, 10, 2, 1, '#ca8672'); P(6, 8, 1, 2, skinD);
   }
   /* straw hat */
   P(6, 0, 4, 1, hat); P(5, 1, 6, 2, hat); P(5, 3, 6, 1, band); P(2, 4, 12, 2, hat); P(2, 5, 12, 1, hatD);
@@ -732,9 +732,9 @@ const toHex = a => '#' + a.map(v => Math.round(v).toString(16).padStart(2, '0'))
 const mix = (a, b, t) => { const A = rgb(a), B = rgb(b); return toHex(A.map((v, i) => v + (B[i] - v) * t)); };
 const mixPal = (a, b, t) => a.map((c, i) => mix(c, b[i], Math.max(0, Math.min(1, t))));
 /* grass: [base, dark, light]; leaves: [base, light, dark] in the order of C.leaf, C.leafL, C.leafD */
-const GRASS = {spring:['#3fb83a', '#2a922e', '#7ee05a'], summer:[C.grass, C.grassD, C.grassL], autumn:['#a3a63a', '#7e8a2c', '#c9c25a'], winter:['#6f8f5c', '#587a4a', '#8fa874']};
-const LEAVES = {spring:['#5fd35a', '#9be87a', '#2f9e3a'], summer:[C.leaf, C.leafL, C.leafD],
-  autumnA:['#b5b52a', '#dcd84a', '#7a7e1a'], autumnB:['#e0a02a', '#f5d04a', '#a8601a'], autumnC:['#d9662a', '#f09a40', '#963c18']};
+const GRASS = {spring:['#94c656', '#68a03e', '#c8e67a'], summer:[C.grass, C.grassD, C.grassL], autumn:['#b4a454', '#8c7c3c', '#dcc878'], winter:['#8c9c74', '#6c7e5a', '#b8c29c']};
+const LEAVES = {spring:['#9ada62', '#caf28a', '#6eb24a'], summer:[C.leaf, C.leafL, C.leafD],
+  autumnA:['#f2ca4a', '#fff292', '#ca9c32'], autumnB:['#f29242', '#ffc272', '#c6662e'], autumnC:['#da5a42', '#fa9272', '#aa3e36']};
 /* How the world looks on a given day: leaf cover and colour, blossom, fallen leaves, flowers, grass, snow and ice */
 function lookFor(day, snow) {
   const s = seasonOf(day), t = (s.d - 1) / (SEASON_DAYS - 1);

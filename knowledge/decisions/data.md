@@ -102,6 +102,10 @@
 - **Ключи** в `shipped` и `plots` — строки (`"radish"`, `"20,12"`). Ключи `drops` при загрузке переводятся в `int`.
 - **Удалить сохранение** — `delete_save()` (кнопка «Начать заново»).
 
+## Палитры: `godot/data/palette.json`
+
+Две палитры, «3d» и «2d»: ряды цветов по материалам, от светлого к тёмному. Их читают сборщик атласа (`tools/export-atlas.mjs`) и игра (`godot/scripts/palette.gd`: `col`, `snap`, `quantize`). Подробно — [[pixel-art]].
+
 ## Атлас рисунков
 
 - **Файлы:** `godot/assets/atlas.png` (2048×512) и `atlas.json` (`sprites: [{n, x, y, w, h, ax, ay, fy}]`, `shadowBoxes`). `shadowBoxes` в Godot не используются.
