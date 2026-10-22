@@ -66,6 +66,9 @@ var _pinch := 0.0
 
 
 func _ready() -> void:
+	# на телефоне — во весь экран: системные кнопки Android прячутся и появляются только по свайпу от края
+	if OS.get_name() == "Android":
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	atlas = Atlas.new()
 	map = Location.get_loc(loc_id)
 	world = World.new()

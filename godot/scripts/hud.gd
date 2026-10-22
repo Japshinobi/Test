@@ -524,6 +524,7 @@ func open_admin() -> void:
 	var host: bool = main.farmnet.is_host()
 	var day: int = main.day
 	var v := _open("admin", "Админ-панель", 700)
+	# подписи в строках с кнопками — без переноса (autowrap): иначе без ширины они разваливаются по буквам и окно не помещается на экран
 	_text(v, "Для проверки. При смене сезона и дня растения не растут и не увядают." + ("" if host else " Время и день меняет хозяин игры."), 14)
 	# вверху панели: нижние кнопки на экране телефона могут не поместиться
 	_button(_buttons(v), "Скрыть FPS" if fps_label.visible else "Показать FPS", func() -> void:
@@ -540,7 +541,7 @@ func open_admin() -> void:
 			if Location.season_index(day) == i:
 				b.add_theme_stylebox_override("normal", _box(Color("#4a63a8"), Color("#f0cf7a"), 2))
 		var hd := _buttons(v)
-		_text(hd, "День сезона:", 15)
+		_text(hd, "День сезона:", 15).autowrap_mode = TextServer.AUTOWRAP_OFF
 		var spin := SpinBox.new()
 		spin.min_value = 1
 		spin.max_value = Location.SEASON_DAYS
@@ -549,9 +550,9 @@ func open_admin() -> void:
 		_button(hd, "Установить", func() -> void:
 			main.admin_set_day(day - Location.season_day(day) + int(spin.value))
 			open_admin())
-		_text(hd, "(всего дней: %d)" % day, 14)
+		_text(hd, "(всего дней: %d)" % day, 14).autowrap_mode = TextServer.AUTOWRAP_OFF
 		var ht := _buttons(v)
-		_text(ht, "Время:", 15)
+		_text(ht, "Время:", 15).autowrap_mode = TextServer.AUTOWRAP_OFF
 		for t in [[360, "6:00"], [720, "12:00"], [1080, "18:00"], [1320, "22:00"]]:
 			_button(ht, t[1], func() -> void: main.admin_set_time(t[0]))
 		_button(ht, "Запустить время" if main.time_frozen else "Остановить время", func() -> void:
