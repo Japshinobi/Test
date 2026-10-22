@@ -4,6 +4,7 @@ extends CanvasLayer
 
 const Farm := preload("res://scripts/farm.gd")
 const Location := preload("res://scripts/location.gd")
+const Weather := preload("res://scripts/weather.gd")
 
 var main: Node
 var root: Control
@@ -440,46 +441,32 @@ const SEASON_TEXT := {
 }
 
 
-func show_morning(m: Dictionary, note: String) -> void:
+## Утро. Окно — только если сразу после пробуждения началось погодное событие (решение владельца 22.10.2026);
+## ежедневный отчёт (созрело, ящик, цены) убран — где его показывать, решим позже. m — итог ночи из farm.new_day.
+func show_morning(_m: Dictionary, note: String) -> void:
 	sleepers_label.text = ""
-	var day: int = main.day
-	var sid := Location.season_id(day)
-	var v := _open("morning", "%s, день %d из %d" % [main.season_text(), Location.season_day(day), Location.SEASON_DAYS], 620)
-	var lines := PackedStringArray()
-	if m.get("season_changed", false):
-		lines.append(SEASON_TEXT[sid])
-		if not m.get("withered", {}).is_empty():
-			lines.append("Не пережили смену сезона: %s. Уберите увядшие растения с грядок." % ", ".join(m["withered"].keys().map(func(k): return "%s ×%d" % [Farm.crop(k)["name"], m["withered"][k]])))
-		var now := Farm.CROPS.filter(func(c): return Farm.can_plant(c["key"], sid)).map(func(c): return String(c["name"]).to_lower())
-		if not now.is_empty():
-			lines.append("В этом сезоне сажают: %s." % ", ".join(now))
-	if m.get("snowed", false) and sid == "winter":
-		lines.append("За ночь всё засыпало снегом.")
-	if Location.snowing(day):
-		lines.append("Сегодня идёт снег.")
-	if m.get("income", 0) > 0:
-		lines.append("За отгрузку из ящика получено %d монет." % m["income"])
 	if note != "":
-		lines.append(note)
-	var ripe: Dictionary = m.get("ripened", {})
-	lines.append(("За ночь созрело: %s." % ", ".join(ripe.keys().map(func(k): return "%s ×%d" % [Farm.crop(k)["product"], ripe[k]]))) if not ripe.is_empty() else "Пока ничего не созрело. Растения тянутся к солнцу.")
-	if m.get("dry", 0) > 0:
-		lines.append("Без полива осталось растений: %d. Они росли вдвое медленнее." % m["dry"])
-	var best := ""
-	var best_price := 0.0
-	for c in Farm.CROPS:
-		var pr := Farm.price(day, c["key"]) / float(c["sell"])
-		if best == "" or pr > best_price:
-			best = c["key"]
-			best_price = pr
-	lines.append("Сегодня дороже всего принимают: %s, по %d монет." % [String(Farm.crop(best)["product"]).to_lower(), Farm.price(day, best)])
-	_text(v, "\n\n".join(lines), 16)
+		toast(note)
+	var day: int = main.day
+	var am := String(main.farmnet.farm.weather["today"].get("am", "clear"))
+	var text := ""
+	match am:
+		"rain":
+			text = "С утра идёт дождь. Огород полит на весь день."
+		"fog":
+			text = "С утра всё окутал туман."
+		"snow":
+			text = "Пошёл первый снег. Зима вступила в свои права." if Location.season_day(day) == 1 else "С утра идёт снег."
+	if text == "":
+		return
+	var v := _open("morning", "%s, день %d из %d" % [main.season_text(), Location.season_day(day), Location.SEASON_DAYS], 620)
+	_text(v, text, 16)
 	_button(_buttons(v), "Доброе утро!", close_dialog)
 
 
 # ---------- вступление, справка, админ-панель ----------
 
-const HOW := "1. Мотыгой вскопайте землю на любой траве своего огорода (кроме двора у дома и дорог). Камни разбивают киркой, деревья, пни и ветки рубят топором, цветы скашивают косой.\n2. Возьмите семена и посадите их на вскопанную грядку.\n3. Полейте грядку из лейки. Воду набирают в колодце или пруду.\n4. Ночью растения подрастают. Без полива — вдвое медленнее.\n5. Год делится на четыре сезона по 12 дней. У каждой культуры свой сезон: когда он кончается, растение увядает. Зимой огород отдыхает, переживает её только яблоня.\n6. Урожай продают на рынке (вверх до перекрёстка, потом налево) или через ящик у дома — на 10% дешевле, деньги приходят утром. Семена покупают у торговцев; рынок открыт с 8:00 до 18:00, кроме последнего дня сезона.\n7. Дороги у края карты ведут в другие места: вверху перекрёсток, внизу речка, за ней лес.\n8. Чтобы лечь спать и начать новый день, подойдите к двери дома."
+const HOW := "1. Мотыгой вскопайте землю на любой траве своего огорода (кроме двора у дома и дорог). Камни разбивают киркой, деревья, пни и ветки рубят топором, цветы скашивают косой.\n2. Возьмите семена и посадите их на вскопанную грядку.\n3. Полейте грядку из лейки. Воду набирают в колодце или пруду. В дождь огород поливается сам — на весь день.\n4. Ночью растения подрастают. Без полива — вдвое медленнее.\n5. Год делится на четыре сезона по 12 дней. У каждой культуры свой сезон: когда он кончается, растение увядает. Зимой огород отдыхает, переживает её только яблоня.\n6. Урожай продают на рынке (вверх до перекрёстка, потом налево) или через ящик у дома — на 10% дешевле, деньги приходят утром. Семена покупают у торговцев; рынок открыт с 8:00 до 18:00, кроме последнего дня сезона.\n7. Дороги у края карты ведут в другие места: вверху перекрёсток, внизу речка, за ней лес.\n8. Чтобы лечь спать и начать новый день, подойдите к двери дома."
 
 
 func open_intro() -> void:
@@ -558,6 +545,15 @@ func open_admin() -> void:
 		_button(ht, "Запустить время" if main.time_frozen else "Остановить время", func() -> void:
 			main.time_frozen = not main.time_frozen
 			open_admin())
+		var hw := _buttons(v)
+		_text(hw, "Погода:", 15).autowrap_mode = TextServer.AUTOWRAP_OFF
+		var now := String(Weather.now(main.farmnet.farm.weather["today"], main.minutes)[0])
+		for id in Weather.TYPES:
+			var b := _button(hw, Weather.name_of(id), func() -> void:
+				main.admin_set_weather(id)
+				open_admin())
+			if id == now:
+				b.add_theme_stylebox_override("normal", _box(Color("#4a63a8"), Color("#f0cf7a"), 2))
 		var hf := _buttons(v)
 		_button(hf, "Пропустить ночь (растения растут)", func() -> void:
 			close_dialog()

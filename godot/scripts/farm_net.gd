@@ -472,6 +472,24 @@ func _peers() -> Array:
 
 
 ## Только у хозяина: закончить день для всех (все легли спать, наступила полночь или кнопка «+ день»).
+## Только у хозяина: если пошёл дождь — полить огород и разослать грядки. Вызывается каждый кадр.
+func check_rain(minutes: float) -> void:
+	if not is_host() or not farm.apply_rain(minutes):
+		return
+	for key in farm.plots:
+		var xy: PackedStringArray = String(key).split(",")
+		_all("net_plot", [int(xy[0]), int(xy[1]), farm.plots[key]])
+
+
+## Только у хозяина: погода на сегодня вручную (админ-панель).
+func set_weather(id: String) -> void:
+	if not is_host():
+		return
+	farm.set_weather(id)
+	_all("net_weather", [farm.weather])
+	check_rain(main.minutes)
+
+
 func end_day(note: String) -> void:
 	if not is_host():
 		return
@@ -678,11 +696,19 @@ func net_full(state: Dictionary, minutes: float) -> void:
 
 ## Админ-панель хозяина: день сменился без ночи (растения не растут).
 @rpc("authority", "call_remote", "reliable")
-func net_set_day(d: int, snow_: bool) -> void:
+func net_set_day(d: int, snow_: bool, weather_: Dictionary) -> void:
 	farm.day = d
 	farm.snow = snow_
+	farm.weather = weather_
 	main.day = d
 	main.set_day(d)
+
+
+## Погода сменилась вручную (админ-панель хозяина).
+@rpc("authority", "call_remote", "reliable")
+func net_weather(weather_: Dictionary) -> void:
+	farm.weather = weather_
+	main.update_weather()
 
 
 @rpc("authority", "call_remote", "reliable")

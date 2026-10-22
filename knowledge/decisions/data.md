@@ -91,7 +91,7 @@
 ## Сохранение
 
 - **`user://save.json`** — пишет `farm_net.gd` → `save_game()`: каждые 20 секунд, утром, при сворачивании и закрытии. Только у хозяина или в одиночной игре. Содержимое:
-  - `farm.to_dict()`: `day`, `money`, `shipped`, `mods`, `snow_trod`, `plots`, `drops`, `next_drop`, `snow`;
+  - `farm.to_dict()`: `day`, `money`, `shipped`, `mods`, `snow_trod`, `plots`, `drops`, `next_drop`, `snow`, `weather` (с 22.10.2026; в старом сохранении его нет — погода выбирается заново);
   - `version: 1`;
   - `minutes`;
   - `invs` и `water` — инвентари и вода по постоянным номерам игроков;

@@ -3,6 +3,7 @@ extends RefCounted
 ## и в Unity (OgorodCore.cs). Этим состоянием владеет хозяин игры, остальные получают его копию по сети.
 
 const Location := preload("res://scripts/location.gd")
+const Weather := preload("res://scripts/weather.gd")
 
 ## Рост в игровых днях; сезон — 12 дней. Вне своих сезонов растение вянет.
 ## regrow — через сколько дней плодоносит снова после сбора (0 — растение убирается целиком).
@@ -48,7 +49,12 @@ var water := {}
 ## Предметы на земле: id -> {item, n, x, z}
 var drops := {}
 var next_drop := 1
+## Лежит ли снег на земле (зимой): ложится после снегопада, без снегопада сходит случайно.
 var snow := false
+## Погода (решает хозяин): day — для какого дня планы; today и next — планы на сегодня и завтра (см. weather.gd);
+## wet — дождь сегодня уже был: огород полит на весь день.
+var weather := {"day": 1, "today": Weather.fixed("clear"), "next": Weather.fixed("clear"), "wet": false}
+var rng := RandomNumberGenerator.new()
 ## Изменения карт по локациям: что срубили, разбили, скосили. "farm" -> {"x,y": изменение}
 var mods := {}
 ## Протоптанный снег: локация -> {"x,y": true}. Свежий снег засыпает следы, весной снег тает.
@@ -58,6 +64,32 @@ var snow_trod := {}
 func _init() -> void:
 	for c in CROPS:
 		shipped[c["key"]] = 0
+	rng.randomize()
+	new_weather(day)
+
+
+# ---------- погода ----------
+
+## Погода на день d: «завтра» из прошлого плана становится «сегодня», на завтра выбирается новая.
+func new_weather(d: int) -> void:
+	var today: Dictionary = weather["next"] if int(weather.get("day", 0)) + 1 == d else Weather.plan(d, rng)
+	weather = {"day": d, "today": today, "next": Weather.plan(d + 1, rng), "wet": false}
+
+
+## Погода на сегодня — вручную (админ-панель).
+func set_weather(id: String) -> void:
+	weather["today"] = Weather.fixed(id)
+	weather["wet"] = false
+
+
+## Если сегодня уже шёл дождь — полить весь огород (один раз за день). true — грядки изменились.
+func apply_rain(minutes: float) -> bool:
+	if weather.get("wet", false) or not Weather.waters_now(weather["today"], minutes):
+		return false
+	weather["wet"] = true
+	for key in plots:
+		plots[key]["watered"] = true
+	return true
 
 
 # ---------- предметы и инвентарь ----------
@@ -265,7 +297,8 @@ func use(map: Location, peer: int, x: int, y: int, slot: int) -> Dictionary:
 	match tool:
 		"hoe":
 			if p == null:
-				plots[cell_key(x, y)] = {"tilled": true, "watered": false, "crop": "", "age": 0.0, "ripe": false, "grown": false, "dead": false}
+				# после дождя новая грядка тоже полита: огород полит на весь день
+				plots[cell_key(x, y)] = {"tilled": true, "watered": weather.get("wet", false), "crop": "", "age": 0.0, "ripe": false, "grown": false, "dead": false}
 				return {"plot": true, "fx": "till"}
 			if p["crop"] != "":
 				return {"msg": "Тут растёт: %s." % crop(p["crop"])["name"].to_lower()}
@@ -323,7 +356,7 @@ static func harvest(p: Dictionary) -> int:
 ## Возвращает отчёт для утреннего окна.
 func new_day() -> Dictionary:
 	var m := {"ripened": {}, "withered": {}, "dry": 0, "income": 0, "season_changed": false, "snowed": false}
-	var snowed := Location.snowing(day)
+	var snowed := Weather.had(weather["today"], "snow", 24.0 * 60.0)
 	var before := Location.season_id(day)
 	var next := Location.season_id(day + 1)
 	m["season_changed"] = next != before
@@ -372,10 +405,16 @@ func new_day() -> Dictionary:
 		if snowed:
 			snow = true
 			snow_trod = {}
+		elif snow and rng.randf() < Weather.SNOW_MELT:
+			snow = false
+			snow_trod = {}
 	else:
 		snow = false
 		snow_trod = {}
 	m["snowed"] = snowed
+	new_weather(day)
+	# дождь с самого утра — огород полит сразу
+	apply_rain(6.0 * 60.0)
 	return m
 
 
@@ -504,7 +543,7 @@ func add_drop(item: String, n: int, x: float, z: float, loc: String = "farm") ->
 ## Всё состояние одним словарём: для отправки по сети (и для сохранения игры потом).
 func to_dict() -> Dictionary:
 	return {"day": day, "money": money, "shipped": shipped, "mods": mods, "snow_trod": snow_trod,
-		"plots": plots, "drops": drops, "next_drop": next_drop, "snow": snow}
+		"plots": plots, "drops": drops, "next_drop": next_drop, "snow": snow, "weather": weather}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -519,3 +558,11 @@ func from_dict(d: Dictionary) -> void:
 	mods = d.get("mods", {})
 	snow_trod = d.get("snow_trod", {})
 	snow = d["snow"]
+	if d.has("weather"):
+		weather = d["weather"]
+		weather["day"] = int(weather.get("day", day))
+		for k in ["today", "next"]:
+			if weather[k].has("at"):
+				weather[k]["at"] = int(weather[k]["at"])
+	else:
+		new_weather(day)

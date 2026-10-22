@@ -62,7 +62,7 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 	_small_waters.clear()
 	_cell_sprites.clear()
 	_shake.clear()
-	var snow := Location.snow_cover(day)
+	var snow: bool = farm.snow and Location.season_id(day) == "winter"
 	_snow = snow
 	_day = day
 	var look := Location.look_name(day, snow)

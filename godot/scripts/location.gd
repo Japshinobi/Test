@@ -233,15 +233,6 @@ static func season_day(day: int) -> int:
 	return (day - 1) % SEASON_DAYS + 1
 
 
-## Примерно через день зимой идёт снег; к утру он ложится.
-static func snowing(day: int) -> bool:
-	return day >= 1 and season_id(day) == "winter" and hash3(day, 5, 77) < 0.5
-
-
-static func snow_cover(day: int) -> bool:
-	return season_id(day) == "winter" and snowing(day - 1)
-
-
 ## Название «вида» дня в атласе: деревья, кусты, трава и цветы меняются с ним.
 static func look_name(day: int, snow: bool) -> String:
 	match season_id(day):

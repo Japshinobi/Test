@@ -9,6 +9,7 @@ const Avatar := preload("res://scripts/avatar.gd")
 const Hud := preload("res://scripts/hud.gd")
 const FarmNet := preload("res://scripts/farm_net.gd")
 const Sfx := preload("res://scripts/sfx.gd")
+const Weather := preload("res://scripts/weather.gd")
 
 const PORT := 24565
 const SPEED := 3.6          # клеток в секунду
@@ -49,6 +50,7 @@ var _save_t := 0.0
 var _last_cell := Vector2i(-1, -1)
 var _trod_sent := {}
 var _snowfall: CPUParticles3D
+var _rainfall: CPUParticles3D
 var _late_warned := false
 var yaw := 0.0
 var dist := 18.0
@@ -141,6 +143,7 @@ func _process(delta: float) -> void:
 	_update_camera(delta)
 	_tint_t += delta
 	_update_light(_tint_t > 0.25)
+	farmnet.check_rain(minutes)
 	world.set_market_open(market_open())
 	world.tick(delta)
 	_net_tick(delta)
@@ -171,7 +174,14 @@ func admin_set_day(d: int) -> void:
 		return
 	d = maxi(1, d)
 	var snow := farmnet.farm.snow if Location.season_id(d) == "winter" else false
-	farmnet._all("net_set_day", [d, snow])
+	farmnet.farm.new_weather(d)
+	farmnet._all("net_set_day", [d, snow, farmnet.farm.weather])
+	farmnet.check_rain(minutes)
+
+
+## Админ-панель: погода на сегодня вручную (решает хозяин, видят все).
+func admin_set_weather(id: String) -> void:
+	farmnet.set_weather(id)
 
 
 func admin_set_time(m: float) -> void:
@@ -235,7 +245,7 @@ func _step_on(cell: Vector2i) -> void:
 	if cell == _last_cell:
 		return
 	_last_cell = cell
-	if not Location.snow_cover(day):
+	if not farmnet.farm.snow or Location.season_id(day) != "winter":
 		return
 	var k := "%s:%d,%d" % [loc_id, cell.x, cell.y]
 	if _trod_sent.has(k) or farmnet.farm.snow_trod.get(loc_id, {}).has("%d,%d" % [cell.x, cell.y]):
@@ -244,7 +254,12 @@ func _step_on(cell: Vector2i) -> void:
 	farmnet.request("trod", [loc_id, cell.x, cell.y])
 
 
-## Падающий снег вокруг камеры в снежные дни.
+## Погода сменилась (админ-панель): сразу перерисовать свет, дождь и снег.
+func update_weather() -> void:
+	_update_light(true)
+
+
+## Падающий снег и дождь вокруг камеры; сколько их — решает погода (_update_fall).
 func _update_snowfall() -> void:
 	if _snowfall == null:
 		_snowfall = CPUParticles3D.new()
@@ -266,8 +281,46 @@ func _update_snowfall() -> void:
 		mesh.material = mat
 		_snowfall.mesh = mesh
 		add_child(_snowfall)
-	_snowfall.emitting = Location.snowing(day)
-	_snowfall.visible = _snowfall.emitting
+	if _rainfall == null:
+		# капли — вытянутые штрихи, всегда вертикальные на экране
+		_rainfall = CPUParticles3D.new()
+		_rainfall.amount = 900
+		_rainfall.lifetime = 0.9
+		_rainfall.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+		_rainfall.emission_box_extents = Vector3(16, 0.5, 16)
+		_rainfall.direction = Vector3(0.05, -1, 0)
+		_rainfall.spread = 2.0
+		_rainfall.initial_velocity_min = 13.0
+		_rainfall.initial_velocity_max = 16.0
+		_rainfall.gravity = Vector3.ZERO
+		var drop := QuadMesh.new()
+		drop.size = Vector2(0.03, 0.42)
+		var dmat := StandardMaterial3D.new()
+		dmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		dmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		dmat.albedo_color = Color(0.82, 0.88, 1.0, 0.55)
+		dmat.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+		drop.material = dmat
+		_rainfall.mesh = drop
+		add_child(_rainfall)
+	_update_fall(Weather.look(farmnet.farm.weather["today"], minutes))
+
+
+func _update_fall(w: Dictionary) -> void:
+	_set_fall(_snowfall, w["snow"])
+	_set_fall(_rainfall, w["rain"])
+	sound.set_rain(w["rain"])
+
+
+## Частицы идут, если погода хоть немного «падает»; во время перехода их становится больше или меньше.
+func _set_fall(p: CPUParticles3D, k: float) -> void:
+	if p == null:
+		return
+	var on := k > 0.02
+	if p.emitting != on:
+		p.emitting = on
+	p.visible = on
+	p.amount_ratio = clampf(k, 0.05, 1.0)
 
 
 ## На клетке что-то изменилось (срубили дерево и т. п.): обновить картинку и проходимость.
@@ -383,7 +436,9 @@ func _make_environment() -> void:
 
 ## Солнце встаёт в 6:00 на востоке, в полдень стоит на юге, садится в 20:30 на западе.
 func _update_light(sprites_too: bool) -> void:
-	var tint := tint_at(minutes)
+	# погода: свет тусклее и с оттенком, дымка гуще, дождь и снег (с плавным переходом)
+	var w := Weather.look(farmnet.farm.weather["today"], minutes)
+	var tint := tint_at(minutes) * (w["tint"] as Color)
 	var t := (minutes - 360.0) / 870.0
 	if t > 0.0 and t < 1.0:
 		var a := t * PI
@@ -391,7 +446,7 @@ func _update_light(sprites_too: bool) -> void:
 		var dir := Vector3(cos(a), maxf(elev, 0.18) * 1.3, 0.55).normalized()
 		sun.basis = Basis.looking_at(-dir, Vector3.UP)
 		sun.light_color = tint
-		sun.light_energy = 0.15 * minf(1.0, elev * 3.0)
+		sun.light_energy = 0.15 * minf(1.0, elev * 3.0) * float(w["light"])
 		sun.visible = true
 	else:
 		sun.visible = false
@@ -400,6 +455,8 @@ func _update_light(sprites_too: bool) -> void:
 	var sky := Color(0.55, 0.74, 0.93) * tint
 	env.background_color = sky
 	env.fog_light_color = sky
+	env.fog_density = w["fog"]
+	_update_fall(w)
 	if sprites_too:
 		_tint_t = 0.0
 		world.set_tint(tint)
@@ -413,6 +470,8 @@ func _update_light(sprites_too: bool) -> void:
 func _update_camera(delta: float) -> void:
 	if _snowfall:
 		_snowfall.position = me.position + Vector3(0, 7, 0)
+	if _rainfall:
+		_rainfall.position = me.position + Vector3(0, 9, 0)
 	var target := me.position + Vector3(0, 0.7, 0)
 	cam_target = cam_target.lerp(target, 1.0 - exp(-8.0 * delta))
 	var off := Vector3(sin(yaw) * cos(PITCH), sin(PITCH), cos(yaw) * cos(PITCH)) * dist
