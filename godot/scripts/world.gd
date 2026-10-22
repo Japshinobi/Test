@@ -254,6 +254,9 @@ func set_tint(c: Color) -> void:
 
 ## Показать грядку так, как она сейчас: вскопанная (или политая) земля и растение на ней.
 func sync_plot(x: int, y: int, p: Variant) -> void:
+	# грядки рисуются только на огороде: изменение грядки приходит всем, где бы игрок ни был
+	if map == null or map.id != "farm":
+		return
 	var cell := Vector2i(x, y)
 	if _plots.has(cell):
 		_plots[cell].free()
@@ -283,7 +286,7 @@ func sync_plot(x: int, y: int, p: Variant) -> void:
 	if p["crop"] != "":
 		var name: String
 		if p["dead"]:
-			name = "dead"
+			name = "dead_snow" if _snow else "dead"
 		elif Farm.crop(p["crop"]).get("tree", false):
 			name = "crop_%s_%d_%s" % [p["crop"], Farm.stage(p), _look]
 		else:

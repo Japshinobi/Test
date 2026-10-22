@@ -194,7 +194,8 @@ func is_target(cell: Vector2i) -> bool:
 		return true
 	if map.ground_at(cell.x, cell.y) == "~":
 		return true
-	if farm.plot_at(cell.x, cell.y) != null:
+	# грядки есть только на огороде: в другой локации та же клетка — просто земля
+	if main.loc_id == "farm" and farm.plot_at(cell.x, cell.y) != null:
 		return true
 	var t := tool()
 	return (t == "hoe" or t == "seed") and Farm.farmable(map, cell.x, cell.y)
