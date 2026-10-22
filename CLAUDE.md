@@ -82,6 +82,7 @@
 - `farm_net.gd` — действия игроков, рассылка, сохранение.
 - `world.gd` — 3D-картинка локации.
 - `location.gd` — карта и mods.
+- `weather.gd` — погода: шансы по сезонам, план дня, как выглядит (состояние — `farm.gd` → `weather`).
 - `hud.gd` — интерфейс.
 - `avatar.gd` — персонаж; `atlas.gd` — атлас; `palette.gd` — палитры 3D и 2D (`data/palette.json`); `sfx.gd` — звуки.
 
