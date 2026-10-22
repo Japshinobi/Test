@@ -13,7 +13,7 @@ var sprites := {}
 ## перспективы по краям экрана заваливается наружу, а внизу сплющивается. Здесь картинка
 ## выводится параллельно экрану; высота — как у вертикального спрайта в середине экрана
 ## (растяжение STRETCH × косинус наклона камеры). Глубина берётся от вертикального спрайта,
-## чтобы голова не уходила в стену или дерево за спиной. Подкраска (modulate) работает как раньше.
+## чтобы голова не уходила в стену или дерево за спиной; сама картинка остаётся плоской. Подкраска (modulate) работает как раньше.
 const UPRIGHT := """
 shader_type spatial;
 render_mode unshaded, cull_disabled;
@@ -29,12 +29,12 @@ void vertex() {
 	float y = VERTEX.y * length(MODEL_MATRIX[1].xyz);
 	vec3 standing = anchor + vec3(x, 0.0, 0.0) + up * y;
 	vec3 screen = anchor + vec3(x, y * up.y, 0.0);
-	if (PROJECTION_MATRIX[3][3] < 0.5) {
-		screen *= standing.z / screen.z;
-	} else {
-		screen.z = standing.z;
-	}
-	POSITION = PROJECTION_MATRIX * vec4(screen, 1.0);
+	// картинка плоская и параллельна экрану (иначе текстура гнётся по диагонали),
+	// а глубина — от вертикального спрайта
+	vec4 pos = PROJECTION_MATRIX * vec4(screen, 1.0);
+	vec4 depth = PROJECTION_MATRIX * vec4(standing, 1.0);
+	pos.z = depth.z / depth.w * pos.w;
+	POSITION = pos;
 }
 
 void fragment() {
