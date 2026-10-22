@@ -21,6 +21,9 @@ var fast_btn: Button
 var belt_box: HBoxContainer
 var tool_label: Label
 var toast_label: Label
+## Число кадров в секунду в углу экрана (включается в админ-панели) — для замера скорости на телефоне.
+var fps_label: Label
+var _fps_t := 0.0
 var _toast_t := 0.0
 var _belt_sig := ""
 var _menu: PopupMenu
@@ -144,6 +147,14 @@ func setup(p_main: Node) -> void:
 	toast_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(toast_label)
 
+	fps_label = _outlined_label(18)
+	fps_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	fps_label.offset_left = 16
+	fps_label.offset_top = -40
+	fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fps_label.visible = false
+	root.add_child(fps_label)
+
 	# затемнение при переходе между локациями
 	fade_rect = ColorRect.new()
 	fade_rect.color = Color(0.02, 0.03, 0.09, 0.0)
@@ -154,6 +165,11 @@ func setup(p_main: Node) -> void:
 
 
 func _process(delta: float) -> void:
+	if fps_label.visible:
+		_fps_t -= delta
+		if _fps_t <= 0.0:
+			_fps_t = 0.5
+			fps_label.text = "FPS: %d" % Engine.get_frames_per_second()
 	if _toast_t > 0.0:
 		_toast_t -= delta
 		toast_label.modulate.a = clampf(_toast_t / 0.4, 0.0, 1.0)
@@ -509,6 +525,11 @@ func open_admin() -> void:
 	var day: int = main.day
 	var v := _open("admin", "Админ-панель", 700)
 	_text(v, "Для проверки. При смене сезона и дня растения не растут и не увядают." + ("" if host else " Время и день меняет хозяин игры."), 14)
+	# вверху панели: нижние кнопки на экране телефона могут не поместиться
+	_button(_buttons(v), "Скрыть FPS" if fps_label.visible else "Показать FPS", func() -> void:
+		fps_label.visible = not fps_label.visible
+		_fps_t = 0.0
+		open_admin())
 	if host:
 		_text(v, "Сезон", 15).add_theme_color_override("font_color", Color("#9aa0b4"))
 		var hs := _buttons(v)
