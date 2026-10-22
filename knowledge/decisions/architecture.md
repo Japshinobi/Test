@@ -68,6 +68,12 @@
 
 `sfx.gd` синтезирует короткие звуки при запуске из таблицы `SOUNDS` (`till`, `water`, `plant`, `harvest`, `coin`, `nope`, `pickup`, `chop`, `mine`). Звуковых файлов нет. Новый звук — новая строка в `SOUNDS`, вызов — `main.sfx("имя")` или по сети `net_sfx`.
 
+## Сборка APK
+
+- **Gradle-проект** `android/` на готовой библиотеке Godot из Maven Central: `org.godotengine:godot:4.7.2.stable@aar` (`android/app/build.gradle`). Файлы игры из `godot/` при сборке копируются внутрь APK (в assets).
+- **Подпись** — отладочным ключом (`signingConfig signingConfigs.debug`): APK ставится на телефон вручную; для Google Play нужен свой ключ.
+- Как собирать и какие бывают сбои — `android/README.md` и [[lessons]], «Сборка APK».
+
 ## Связано
 
 [[network]] · [[data]] · [[pixel-art]] · [[ui]] · [[lessons]]
