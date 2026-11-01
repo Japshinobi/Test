@@ -441,29 +441,53 @@ const SEASON_TEXT := {
 }
 
 
-## Утро. Окно — только если сразу после пробуждения началось погодное событие (решение владельца 22.10.2026);
-## ежедневный отчёт (созрело, ящик, цены) убран — где его показывать, решим позже. m — итог ночи из farm.new_day.
-func show_morning(_m: Dictionary, note: String) -> void:
+## Утро. Окно — только при событии: ночью были заморозки или сразу после пробуждения погодное событие
+## (решения владельца 22.10 и 01.11.2026). Выручка ящика и строка о полуночи — всплывающей строкой.
+## m — итог ночи из farm.new_day.
+func show_morning(m: Dictionary, note: String) -> void:
 	sleepers_label.text = ""
+	var pop := PackedStringArray()
 	if note != "":
-		toast(note)
+		pop.append(note)
+	if int(m.get("income", 0)) > 0:
+		pop.append("Ящик принёс %d %s" % [int(m["income"]), coins_word(int(m["income"]))])
+	if not pop.is_empty():
+		toast("\n".join(pop))
 	var day: int = main.day
-	var am := String(main.farmnet.farm.weather["today"].get("am", "clear"))
-	var text := ""
-	match am:
+	var lines := PackedStringArray()
+	if m.has("frost"):
+		var killed: Dictionary = m["frost"]
+		if killed.is_empty():
+			lines.append("Ночью были заморозки, но огород уцелел.")
+		else:
+			lines.append("Ночью были заморозки. Погибло: %s." % ", ".join(killed.keys().map(func(k): return "%s ×%d" % [String(Farm.crop(k)["name"]).to_lower(), int(killed[k])])))
+	match String(main.farmnet.farm.weather["today"].get("am", "clear")):
 		"rain":
-			text = "С утра идёт дождь. Огород полит на весь день."
+			lines.append("С утра идёт дождь. Огород полит на весь день.")
 		"storm":
-			text = "С утра гроза. Молния может сжечь посевы."
+			lines.append("С утра гроза. Молния может сжечь посевы.")
 		"fog":
-			text = "С утра всё окутал туман."
+			lines.append("С утра всё окутал туман.")
 		"snow":
-			text = "Пошёл первый снег. Зима вступила в свои права." if Location.season_day(day) == 1 else "С утра идёт снег."
-	if text == "":
+			lines.append("Пошёл первый снег. Зима вступила в свои права." if Location.season_day(day) == 1 else "С утра идёт снег.")
+	if lines.is_empty():
 		return
 	var v := _open("morning", "%s, день %d из %d" % [main.season_text(), Location.season_day(day), Location.SEASON_DAYS], 620)
-	_text(v, text, 16)
+	_text(v, "\n\n".join(lines), 16)
 	_button(_buttons(v), "Доброе утро!", close_dialog)
+
+
+## «монету», «монеты» или «монет» — по числу: 1 монету, 2 монеты, 5 монет, 11 монет, 21 монету.
+static func coins_word(n: int) -> String:
+	var a := absi(n) % 100
+	if a >= 11 and a <= 14:
+		return "монет"
+	match a % 10:
+		1:
+			return "монету"
+		2, 3, 4:
+			return "монеты"
+	return "монет"
 
 
 # ---------- вступление, справка, админ-панель ----------
@@ -557,6 +581,9 @@ func open_admin() -> void:
 			if id == now:
 				b.add_theme_stylebox_override("normal", _box(Color("#4a63a8"), Color("#f0cf7a"), 2))
 		var hf := _buttons(v)
+		_button(hf, "Заморозки этой ночью", func() -> void:
+			main.admin_frost_tonight()
+			toast("Ночью будут заморозки: с 21:00 иней."))
 		_button(hf, "Пропустить ночь (растения растут)", func() -> void:
 			close_dialog()
 			main.skip_day())

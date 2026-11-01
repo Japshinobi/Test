@@ -491,6 +491,14 @@ func set_weather(id: String) -> void:
 	check_rain(main.minutes)
 
 
+## Только у хозяина: заморозки в эту ночь (админ-панель).
+func set_frost_tonight() -> void:
+	if not is_host():
+		return
+	farm.weather["frost"] = farm.day
+	_all("net_weather", [farm.weather])
+
+
 ## Только у хозяина, каждый кадр: настала минута удара молнии — ударить. Если гроза к этой минуте
 ## кончилась (сменилась погода), удар отменяется. Давно прошедшие удары (перевели часы) пропускаются.
 func check_lightning(minutes: float) -> void:

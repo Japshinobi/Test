@@ -5,6 +5,8 @@ func _selftest() -> void:
 	hud.close_dialog()
 	farmnet.delete_save()
 	var fn := farmnet
+	# 1-й день весны — окно заморозков: ночь заморозков сдвинула бы созревание редиса на день
+	fn.farm.weather["frost"] = -1
 	for x in [20, 21]:
 		fn.request("use", ["farm", x, 12, 0])
 		fn.request("use", ["farm", x, 12, 5])
