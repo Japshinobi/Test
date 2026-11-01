@@ -4,6 +4,8 @@ extends RefCounted
 ## бывают объекты, описано в каталоге data/objects.json — его читают и игра, и редактор.
 
 const SEASON_DAYS := 12
+## Доля клеток травы с цветами (решение владельца 01.11.2026: цветы — случайно на земле, кроме дорог и покрытий).
+const FLOWER_CHANCE := 0.07
 const SEASON_IDS := ["spring", "summer", "autumn", "winter"]
 const SEASON_NAMES := ["Весна", "Лето", "Осень", "Зима"]
 
@@ -104,6 +106,17 @@ func inside(x: int, y: int) -> bool:
 ## Символ земли в клетке; за краем карты — «непроходимо».
 func ground_at(x: int, y: int) -> String:
 	return ground[y * W + x] if inside(x, y) else "#"
+
+
+## Растут ли на клетке цветы: случайно (но у всех игроков одинаково) на траве, где ничего не стоит
+## и цветы не скосили. Грядки огорода проверяет тот, кто спрашивает (на огороде цветы и грядки не совпадают).
+func has_flowers(x: int, y: int) -> bool:
+	var g := ground_at(x, y)
+	if g != "." and g != ",":
+		return false
+	if mods.get("%d,%d" % [x, y], {}).get("mown", false) or object_at(x, y) != null:
+		return false
+	return hash3(x, y, 53) < FLOWER_CHANCE
 
 
 ## Объект, который стоит на клетке (или занимает её частью, как дом), либо null.

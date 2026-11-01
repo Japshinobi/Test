@@ -420,8 +420,8 @@ func _strike(peer: int, loc: String, x: int, y: int, slot: int) -> void:
 			return
 	else:
 		if t == "scythe":
-			if map.ground_at(x, y) == "," and o == null:
-				_all("net_mod", [loc, x, y, {"ground": "."}])
+			if map.has_flowers(x, y) and not (loc == "farm" and farm.plot_at(x, y) != null):
+				_all("net_mod", [loc, x, y, {"mown": true}])
 				_all("net_fx", [loc, x, y, "mow"])
 			elif loc == "farm" and farm.plot_at(x, y) != null and farm.plot_at(x, y)["crop"] != "":
 				say.call("Какие культуры убирать косой, решим позже.")

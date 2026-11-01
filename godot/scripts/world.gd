@@ -106,7 +106,7 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 		var flowers := "bloom" if season == "spring" else ("some" if season == "summer" else "wither")
 		for y in map.H:
 			for x in map.W:
-				if map.ground_at(x, y) == "," and map.object_at(x, y) == null and farm.plot_at(x, y) == null:
+				if map.has_flowers(x, y) and not (map.id == "farm" and farm.plot_at(x, y) != null):
 					_flowers[Vector2i(x, y)] = _obj("flower_%s_%d" % [flowers, int(Location.hash3(x, y, 31) * 8)], Vector3(x + 0.5, 0, y + 0.5), false)
 	# подсолнухи на соседских полях: через клетку, летом растут, осенью отцветают
 	if not snow and (season == "summer" or season == "autumn"):

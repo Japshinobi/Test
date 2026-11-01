@@ -34,7 +34,7 @@ const TOOLS := {
 	"pick": {"name": "Кирка", "icon": "icon_pick"},
 	"scythe": {"name": "Коса", "icon": "icon_scythe"},
 }
-const RES := {"wood": {"name": "Дрова", "icon": "icon_wood"}, "stone": {"name": "Камень", "icon": "icon_stone"}}
+const RES := {"wood": {"name": "Древесина", "icon": "icon_wood"}, "stone": {"name": "Камень", "icon": "icon_stone"}}
 
 var day := 1
 var money := 100
