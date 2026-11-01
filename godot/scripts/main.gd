@@ -186,6 +186,11 @@ func admin_set_day(d: int) -> void:
 	farmnet.check_rain(minutes)
 
 
+## Админ-панель: заморозки в эту ночь (решает хозяин, видят все).
+func admin_frost_tonight() -> void:
+	farmnet.set_frost_tonight()
+
+
 ## Админ-панель: погода на сегодня вручную (решает хозяин, видят все).
 func admin_set_weather(id: String) -> void:
 	farmnet.set_weather(id)
@@ -470,6 +475,10 @@ func _update_light(sprites_too: bool) -> void:
 	# погода: свет тусклее и с оттенком, дымка гуще, дождь и снег (с плавным переходом)
 	var w := Weather.look(farmnet.farm.weather["today"], minutes)
 	var tint := tint_at(minutes) * (w["tint"] as Color)
+	# заморозки: свет холоднее, на земле иней
+	var frost := Weather.frost_amount(farmnet.farm.weather, day, minutes)
+	tint = tint.lerp(tint * Color(0.78, 0.86, 1.0), frost)
+	world.set_frost(frost, tint)
 	var flashing := _flash > 0.0
 	if flashing:
 		# вспышка молнии: всё на миг светлеет (и спрайты тоже)

@@ -51,6 +51,17 @@ const SAFE := 1              # молния не бьёт в клетку игр
 const FIRE := [5.0, 7.0]     # огонь горит, секунд
 const TRACE := [10.0, 15.0]  # горелый след виден после огня, секунд
 
+## Заморозки — ночное явление (лист «Параметры», решения владельца 01.11.2026): окно из 3 ночей — весной после
+## 1, 2 или 3-го дня, осенью после 9, 10 или 11-го; в каждом окне с шансом 50% и не больше одного раза.
+## В 21:00 холодает и проступает иней; утром иней тает к полудню. Ночью гибнет с одним шансом от 1 до 5% каждое
+## растение, которое боится заморозков ("frost" у культуры), а все растущие посевы (кроме деревьев) — +1 день к росту.
+const FROST_NIGHTS := {"spring": [1, 2, 3], "autumn": [9, 10, 11]}
+const FROST_CHANCE := 0.5
+const FROST_KILL := [0.01, 0.05]
+const FROST_FROM := 21.0 * 60.0
+const FROST_IN := 30.0               # иней проступает за полчаса
+const FROST_MELT := [8.0 * 60.0, 12.0 * 60.0]  # утром тает с 8:00 до полудня
+
 const CHANGE_CHANCE := 0.2   # шанс, что погода сменится днём (решение владельца 22.10.2026)
 const CHANGE_FROM := 7 * 60  # смена — в любое время дня, между 7:00 и 20:00
 const CHANGE_TO := 20 * 60
@@ -206,6 +217,27 @@ static func look(p: Dictionary, minutes: float) -> Dictionary:
 		"storm": lerpf(1.0 if a.get("lightning", false) else 0.0, 1.0 if b.get("lightning", false) else 0.0, k),
 		"snow": lerpf(1.0 if a["fall"] == "snow" else 0.0, 1.0 if b["fall"] == "snow" else 0.0, k),
 	}
+
+
+## Начало окна заморозков (день d — первая ночь окна): выбрать, будут ли заморозки и в какую ночь.
+## -1 — в этом окне заморозков нет; -2 — d не начало окна, решать нечего.
+static func frost_roll(d: int, rng: RandomNumberGenerator) -> int:
+	var nights: Array = FROST_NIGHTS.get(Location.season_id(d), [])
+	if nights.is_empty() or Location.season_day(d) != nights[0]:
+		return -2
+	if rng.randf() >= FROST_CHANCE:
+		return -1
+	return d + rng.randi_range(0, nights.size() - 1)
+
+
+## Сколько инея сейчас (0..1): вечером в ночь заморозков — с 21:00, утром после них — до полудня.
+static func frost_amount(w: Dictionary, day: int, minutes: float) -> float:
+	var night := int(w.get("frost", -1))
+	if night == day and minutes >= FROST_FROM:
+		return clampf((minutes - FROST_FROM) / FROST_IN, 0.0, 1.0)
+	if night == day - 1 and night > 0:
+		return 1.0 - clampf((minutes - FROST_MELT[0]) / (FROST_MELT[1] - FROST_MELT[0]), 0.0, 1.0)
+	return 0.0
 
 
 static func name_of(id: String) -> String:

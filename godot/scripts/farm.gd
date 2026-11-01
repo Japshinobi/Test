@@ -7,16 +7,17 @@ const Weather := preload("res://scripts/weather.gd")
 
 ## Рост в игровых днях; сезон — 12 дней. Вне своих сезонов растение вянет.
 ## regrow — через сколько дней плодоносит снова после сбора (0 — растение убирается целиком).
+## "frost": true — культура боится заморозков (лист «Культуры и погода» в design/weather.xlsx).
 const CROPS := [
 	{"key": "radish", "name": "Редис", "product": "Редис", "seed_name": "Семена редиса", "seed": 8, "sell": 22, "grow": 3, "seasons": ["spring", "autumn"]},
 	{"key": "peas", "name": "Горох", "product": "Горох", "seed_name": "Семена гороха", "seed": 20, "sell": 14, "grow": 6, "regrow": 3, "seasons": ["spring"]},
-	{"key": "potato", "name": "Картофель", "product": "Картофель", "seed_name": "Семенной картофель", "seed": 15, "sell": 55, "grow": 8, "seasons": ["spring"]},
+	{"key": "potato", "name": "Картофель", "product": "Картофель", "seed_name": "Семенной картофель", "seed": 15, "sell": 55, "grow": 8, "seasons": ["spring"], "frost": true},
 	{"key": "carrot", "name": "Морковь", "product": "Морковь", "seed_name": "Семена моркови", "seed": 20, "sell": 80, "grow": 10, "seasons": ["spring", "autumn"]},
-	{"key": "strawberry", "name": "Клубника", "product": "Клубника", "seed_name": "Рассада клубники", "seed": 40, "sell": 30, "grow": 8, "regrow": 4, "seasons": ["spring", "summer"]},
-	{"key": "cucumber", "name": "Огурец", "product": "Огурцы", "seed_name": "Семена огурцов", "seed": 15, "sell": 12, "grow": 5, "regrow": 2, "seasons": ["summer"]},
-	{"key": "tomato", "name": "Помидор", "product": "Помидоры", "seed_name": "Рассада томатов", "seed": 25, "sell": 24, "grow": 7, "regrow": 3, "seasons": ["summer"]},
-	{"key": "corn", "name": "Кукуруза", "product": "Кукуруза", "seed_name": "Семена кукурузы", "seed": 20, "sell": 75, "grow": 8, "seasons": ["summer"]},
-	{"key": "pumpkin", "name": "Тыква", "product": "Тыква", "seed_name": "Семена тыквы", "seed": 50, "sell": 240, "grow": 11, "seasons": ["summer", "autumn"]},
+	{"key": "strawberry", "name": "Клубника", "product": "Клубника", "seed_name": "Рассада клубники", "seed": 40, "sell": 30, "grow": 8, "regrow": 4, "seasons": ["spring", "summer"], "frost": true},
+	{"key": "cucumber", "name": "Огурец", "product": "Огурцы", "seed_name": "Семена огурцов", "seed": 15, "sell": 12, "grow": 5, "regrow": 2, "seasons": ["summer"], "frost": true},
+	{"key": "tomato", "name": "Помидор", "product": "Помидоры", "seed_name": "Рассада томатов", "seed": 25, "sell": 24, "grow": 7, "regrow": 3, "seasons": ["summer"], "frost": true},
+	{"key": "corn", "name": "Кукуруза", "product": "Кукуруза", "seed_name": "Семена кукурузы", "seed": 20, "sell": 75, "grow": 8, "seasons": ["summer"], "frost": true},
+	{"key": "pumpkin", "name": "Тыква", "product": "Тыква", "seed_name": "Семена тыквы", "seed": 50, "sell": 240, "grow": 11, "seasons": ["summer", "autumn"], "frost": true},
 	{"key": "apple", "name": "Яблоня", "product": "Яблоки", "seed_name": "Саженец яблони", "seed": 200, "sell": 40, "grow": 12, "regrow": 3, "yield": 3, "tree": true,
 		"seasons": ["spring", "summer", "autumn", "winter"], "plant": ["spring", "summer", "autumn"], "fruit": ["autumn"]},
 ]
@@ -52,7 +53,7 @@ var next_drop := 1
 ## Лежит ли снег на земле (зимой): ложится после снегопада, без снегопада сходит случайно.
 var snow := false
 ## Погода (решает хозяин): day — для какого дня планы; today и next — планы на сегодня и завтра (см. weather.gd);
-## wet — дождь сегодня уже был: огород полит на весь день.
+## wet — дождь сегодня уже был: огород полит на весь день; frost — день, в ночь после которого заморозки (-1 — нет).
 var weather := {"day": 1, "today": Weather.fixed("clear"), "next": Weather.fixed("clear"), "wet": false}
 var rng := RandomNumberGenerator.new()
 ## Изменения карт по локациям: что срубили, разбили, скосили. "farm" -> {"x,y": изменение}
@@ -73,7 +74,12 @@ func _init() -> void:
 ## Погода на день d: «завтра» из прошлого плана становится «сегодня», на завтра выбирается новая.
 func new_weather(d: int) -> void:
 	var today: Dictionary = weather["next"] if int(weather.get("day", 0)) + 1 == d else Weather.plan(d, rng)
-	weather = {"day": d, "today": today, "next": Weather.plan(d + 1, rng), "wet": false}
+	# заморозки решаются один раз на окно, в его первый день
+	var frost := int(weather.get("frost", -1))
+	var roll := Weather.frost_roll(d, rng)
+	if roll != -2:
+		frost = roll
+	weather = {"day": d, "today": today, "next": Weather.plan(d + 1, rng), "wet": false, "frost": frost}
 
 
 ## Погода на сегодня — вручную (админ-панель), с минуты minutes; удары молнии — на остаток дня.
@@ -92,6 +98,24 @@ func burn(x: int, y: int) -> bool:
 	p["ripe"] = false
 	p["burnt"] = true
 	return true
+
+
+## Ночь заморозков: один шанс от 1 до 5% на ночь — с ним гибнет каждое растущее растение, которое боится
+## заморозков (остаётся увядшим); остальные растущие посевы (кроме деревьев) созреют на день позже.
+## Возвращает погибшие: культура -> сколько.
+func frost_night() -> Dictionary:
+	var killed := {}
+	var chance := rng.randf_range(Weather.FROST_KILL[0], Weather.FROST_KILL[1])
+	for key in plots:
+		var p: Dictionary = plots[key]
+		if p["crop"] == "" or p["dead"] or p["ripe"] or crop(p["crop"]).get("tree", false):
+			continue
+		if crop(p["crop"]).get("frost", false) and rng.randf() < chance:
+			p["dead"] = true
+			_add(killed, p["crop"])
+		else:
+			p["age"] = maxf(0.0, float(p["age"]) - 1.0)
+	return killed
 
 
 ## Если сегодня уже шёл дождь — полить весь огород (один раз за день). true — грядки изменились.
@@ -370,6 +394,8 @@ static func harvest(p: Dictionary) -> int:
 ## Возвращает отчёт для утреннего окна.
 func new_day() -> Dictionary:
 	var m := {"ripened": {}, "withered": {}, "dry": 0, "income": 0, "season_changed": false, "snowed": false}
+	if int(weather.get("frost", -1)) == day:
+		m["frost"] = frost_night()
 	var snowed := Weather.had(weather["today"], "snow", 24.0 * 60.0)
 	var before := Location.season_id(day)
 	var next := Location.season_id(day + 1)
@@ -575,6 +601,7 @@ func from_dict(d: Dictionary) -> void:
 	if d.has("weather"):
 		weather = d["weather"]
 		weather["day"] = int(weather.get("day", day))
+		weather["frost"] = int(weather.get("frost", -1))
 		for k in ["today", "next"]:
 			if weather[k].has("at"):
 				weather[k]["at"] = int(weather[k]["at"])

@@ -36,6 +36,7 @@ var _snow := false
 var _day := 1
 var _trod_tex := {}       # картинка протоптанной клетки по названию земли под снегом
 var _market_open := false
+var _frost: MeshInstance3D   # иней на земле (заморозки): полупрозрачный слой поверх земли и грядок
 var _strikes := []        # удары молнии: {bolt, fire, trace, t, fire_s, trace_s} — живут несколько секунд
 
 
@@ -62,6 +63,7 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 	_shops.clear()
 	_small_waters.clear()
 	_strikes.clear()
+	_frost = null
 	_cell_sprites.clear()
 	_shake.clear()
 	var snow: bool = farm.snow and Location.season_id(day) == "winter"
@@ -343,6 +345,40 @@ func drop_distance(id: int, player: Vector3) -> float:
 		return INF
 	var p: Vector3 = _drops[id]["to"]
 	return Vector2(p.x - player.x, p.z - player.z).length()
+
+
+## Иней: amount 0..1, light — цвет света по времени суток (ночью иней тёмный, как всё вокруг). Слой строится один раз на локацию — над землёй и грядками, кроме воды, дорог-мостов
+## и непроходимого. Пока простой бело-голубой налёт — свой рисунок на этапе 3.
+func set_frost(amount: float, light := Color.WHITE) -> void:
+	if amount <= 0.001:
+		if _frost:
+			_frost.visible = false
+		return
+	if _frost == null:
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for y in map.H:
+			for x in map.W:
+				var g := map.ground_at(x, y)
+				if g in ["~", "#", "V", "b", "d", "q", "n"]:
+					continue
+				var a := Vector3(x, 0, y)
+				for v in [a, a + Vector3(1, 0, 0), a + Vector3(1, 0, 1), a, a + Vector3(1, 0, 1), a + Vector3(0, 0, 1)]:
+					st.add_vertex(v)
+		_frost = MeshInstance3D.new()
+		_frost.mesh = st.commit()
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		_frost.material_override = m
+		_frost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_frost.position.y = 0.03
+		content.add_child(_frost)
+	_frost.visible = true
+	var c := Color(0.9, 0.95, 1.0) * light
+	c.a = 0.42 * amount
+	(_frost.material_override as StandardMaterial3D).albedo_color = c
 
 
 ## Удар молнии в клетку: яркий штрих с неба, огонь fire секунд, потом горелый след ещё trace секунд
