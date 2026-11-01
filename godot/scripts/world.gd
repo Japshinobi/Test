@@ -36,6 +36,7 @@ var _snow := false
 var _day := 1
 var _trod_tex := {}       # картинка протоптанной клетки по названию земли под снегом
 var _market_open := false
+var _strikes := []        # удары молнии: {bolt, fire, trace, t, fire_s, trace_s} — живут несколько секунд
 
 
 func setup(p_atlas: Atlas, p_map: Location) -> void:
@@ -60,6 +61,7 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 	_drops.clear()
 	_shops.clear()
 	_small_waters.clear()
+	_strikes.clear()
 	_cell_sprites.clear()
 	_shake.clear()
 	var snow: bool = farm.snow and Location.season_id(day) == "winter"
@@ -343,7 +345,78 @@ func drop_distance(id: int, player: Vector3) -> float:
 	return Vector2(p.x - player.x, p.z - player.z).length()
 
 
+## Удар молнии в клетку: яркий штрих с неба, огонь fire секунд, потом горелый след ещё trace секунд.
+## Огонь и след пока простые (искры и тёмное пятно) — свои рисунки на этапе 3.
+func strike_fx(x: int, y: int, fire: float, trace: float) -> void:
+	var at := Vector3(x + 0.5, 0, y + 0.5)
+	var bolt := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.12, 16.0, 0.12)
+	bolt.mesh = bm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.9, 0.95, 1.0)
+	bolt.material_override = mat
+	bolt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	bolt.position = at + Vector3(0, 8.0, 0)
+	content.add_child(bolt)
+	var trace_mi := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(0.9, 0.9)
+	trace_mi.mesh = pm
+	var tm := StandardMaterial3D.new()
+	tm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	tm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	tm.albedo_color = Color(0.1, 0.07, 0.05, 0.8)
+	trace_mi.material_override = tm
+	trace_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	trace_mi.position = at + Vector3(0, 0.025, 0)
+	content.add_child(trace_mi)
+	var fire_p := CPUParticles3D.new()
+	fire_p.amount = 36
+	fire_p.lifetime = 0.7
+	fire_p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	fire_p.emission_box_extents = Vector3(0.3, 0.05, 0.3)
+	fire_p.direction = Vector3.UP
+	fire_p.spread = 20.0
+	fire_p.initial_velocity_min = 0.6
+	fire_p.initial_velocity_max = 1.4
+	fire_p.gravity = Vector3(0, 0.6, 0)
+	fire_p.scale_amount_min = 0.6
+	fire_p.scale_amount_max = 1.2
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 0.85, 0.3))
+	grad.set_color(1, Color(0.8, 0.15, 0.05, 0.0))
+	fire_p.color_ramp = grad
+	var q := QuadMesh.new()
+	q.size = Vector2(0.14, 0.14)
+	var fm := StandardMaterial3D.new()
+	fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	fm.vertex_color_use_as_albedo = true
+	fm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	fm.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	q.material = fm
+	fire_p.mesh = q
+	fire_p.position = at + Vector3(0, 0.1, 0)
+	content.add_child(fire_p)
+	_strikes.append({"bolt": bolt, "fire": fire_p, "trace": trace_mi, "t": 0.0, "fire_s": fire, "trace_s": trace})
+
+
 func tick(delta: float) -> void:
+	for s in _strikes.duplicate():
+		s["t"] += delta
+		if not is_instance_valid(s["trace"]):
+			_strikes.erase(s)
+			continue
+		if s["t"] > 0.18 and is_instance_valid(s["bolt"]):
+			s["bolt"].queue_free()
+		if s["t"] > s["fire_s"] and is_instance_valid(s["fire"]) and s["fire"].emitting:
+			s["fire"].emitting = false
+		if s["t"] > s["fire_s"] + s["trace_s"]:
+			s["trace"].queue_free()
+			if is_instance_valid(s["fire"]):
+				s["fire"].queue_free()
+			_strikes.erase(s)
 	for sp in _shake.keys():
 		_shake[sp] -= delta
 		var base: float = sp.get_meta("x0", sp.position.x)

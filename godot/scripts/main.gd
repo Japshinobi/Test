@@ -51,6 +51,11 @@ var _last_cell := Vector2i(-1, -1)
 var _trod_sent := {}
 var _snowfall: CPUParticles3D
 var _rainfall: CPUParticles3D
+## Вспышка молнии: насколько светлее сейчас (0 — нет вспышки), гаснет за долю секунды.
+var _flash := 0.0
+var _flash_on := false
+var _far_slot := -1
+var _far_thunder := -1.0
 var _late_warned := false
 var yaw := 0.0
 var dist := 18.0
@@ -144,6 +149,8 @@ func _process(delta: float) -> void:
 	_tint_t += delta
 	_update_light(_tint_t > 0.25)
 	farmnet.check_rain(minutes)
+	farmnet.check_lightning(minutes)
+	_far_storm(delta)
 	world.set_market_open(market_open())
 	world.tick(delta)
 	_net_tick(delta)
@@ -254,6 +261,30 @@ func _step_on(cell: Vector2i) -> void:
 	farmnet.request("trod", [loc_id, cell.x, cell.y])
 
 
+## Удар молнии здесь: штрих, огонь и след (world), яркая вспышка и резкий треск.
+func on_strike(x: int, y: int, fire: float, trace: float) -> void:
+	world.strike_fx(x, y, fire, trace)
+	_flash = 1.0
+	sfx("crack")
+
+
+## Гроза вдали: время от времени слабая вспышка и глухой раскат без удара. Моменты выбираются по дню
+## и игровому времени (Location.hash3), поэтому у обоих игроков совпадают.
+func _far_storm(delta: float) -> void:
+	if _far_thunder >= 0.0:
+		_far_thunder -= delta
+		if _far_thunder < 0.0:
+			sfx("thunder")
+	var w := Weather.look(farmnet.farm.weather["today"], minutes)
+	var slot := int(minutes / 6.0)
+	if slot == _far_slot:
+		return
+	_far_slot = slot
+	if float(w["storm"]) > 0.5 and Location.hash3(day, slot, 41) < 0.35:
+		_flash = maxf(_flash, 0.35)
+		_far_thunder = 0.6 + Location.hash3(day, slot, 42) * 1.4
+
+
 ## Погода сменилась (админ-панель): сразу перерисовать свет, дождь и снег.
 func update_weather() -> void:
 	_update_light(true)
@@ -284,7 +315,7 @@ func _update_snowfall() -> void:
 	if _rainfall == null:
 		# капли — вытянутые штрихи, всегда вертикальные на экране
 		_rainfall = CPUParticles3D.new()
-		_rainfall.amount = 900
+		_rainfall.amount = 1300
 		_rainfall.lifetime = 0.9
 		_rainfall.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
 		_rainfall.emission_box_extents = Vector3(16, 0.5, 16)
@@ -439,6 +470,14 @@ func _update_light(sprites_too: bool) -> void:
 	# погода: свет тусклее и с оттенком, дымка гуще, дождь и снег (с плавным переходом)
 	var w := Weather.look(farmnet.farm.weather["today"], minutes)
 	var tint := tint_at(minutes) * (w["tint"] as Color)
+	var flashing := _flash > 0.0
+	if flashing:
+		# вспышка молнии: всё на миг светлеет (и спрайты тоже)
+		tint = tint.lerp(Color(0.95, 0.97, 1.0), _flash * 0.75)
+		_flash = maxf(0.0, _flash - get_process_delta_time() * 5.0)
+	if flashing or flashing != _flash_on:
+		sprites_too = true
+	_flash_on = flashing
 	var t := (minutes - 360.0) / 870.0
 	if t > 0.0 and t < 1.0:
 		var a := t * PI

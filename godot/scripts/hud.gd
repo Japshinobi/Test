@@ -453,6 +453,8 @@ func show_morning(_m: Dictionary, note: String) -> void:
 	match am:
 		"rain":
 			text = "С утра идёт дождь. Огород полит на весь день."
+		"storm":
+			text = "С утра гроза. Молния может сжечь посевы."
 		"fog":
 			text = "С утра всё окутал туман."
 		"snow":

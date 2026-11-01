@@ -5,6 +5,7 @@ extends Node
 
 const Farm := preload("res://scripts/farm.gd")
 const Location := preload("res://scripts/location.gd")
+const Weather := preload("res://scripts/weather.gd")
 
 var main: Node
 var farm := Farm.new()
@@ -485,9 +486,61 @@ func check_rain(minutes: float) -> void:
 func set_weather(id: String) -> void:
 	if not is_host():
 		return
-	farm.set_weather(id)
+	farm.set_weather(id, main.minutes)
 	_all("net_weather", [farm.weather])
 	check_rain(main.minutes)
+
+
+## Только у хозяина, каждый кадр: настала минута удара молнии — ударить. Если гроза к этой минуте
+## кончилась (сменилась погода), удар отменяется. Давно прошедшие удары (перевели часы) пропускаются.
+func check_lightning(minutes: float) -> void:
+	if not is_host():
+		return
+	var today: Dictionary = farm.weather["today"]
+	var all: Dictionary = today.get("strikes", {})
+	for loc in all:
+		var times: Array = all[loc]
+		while not times.is_empty() and float(times[0]) <= minutes:
+			var t := float(times.pop_front())
+			if minutes - t <= 30.0 and Weather.lightning_now(today, t):
+				strike_lightning(String(loc))
+
+
+## Удар молнии в локации loc: случайная клетка, куда может пройти персонаж, не ближе 2 клеток к игрокам,
+## без деревьев (и яблони на грядке). Посев на клетке сгорает; огонь и след видят все, кто в этой локации.
+func strike_lightning(loc: String) -> Vector2i:
+	var map: Location = Location.get_loc(loc)
+	map.season = Location.season_id(farm.day)
+	var near := _player_cells(loc)
+	for attempt in 400:
+		var c := Vector2i(farm.rng.randi_range(0, map.W - 1), farm.rng.randi_range(0, map.H - 1))
+		if not map.walkable(c.x, c.y):
+			continue
+		var p: Variant = farm.plot_at(c.x, c.y) if loc == "farm" else null
+		if p != null and p["crop"] != "" and Farm.crop(p["crop"]).get("tree", false):
+			continue
+		var close := false
+		for q in near:
+			if maxi(absi(q.x - c.x), absi(q.y - c.y)) <= Weather.SAFE:
+				close = true
+		if close:
+			continue
+		if loc == "farm" and farm.burn(c.x, c.y):
+			_all("net_plot", [c.x, c.y, farm.plot_at(c.x, c.y)])
+		_all("net_strike", [loc, c.x, c.y, farm.rng.randf_range(Weather.FIRE[0], Weather.FIRE[1]), farm.rng.randf_range(Weather.TRACE[0], Weather.TRACE[1])])
+		return c
+	return Vector2i(-1, -1)
+
+
+## Клетки, где стоят игроки в локации loc (хозяин и гости).
+func _player_cells(loc: String) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if main.loc_id == loc:
+		out.append(Vector2i(floori(main.me.position.x), floori(main.me.position.z)))
+	for r in main.remotes.values():
+		if r.get_meta("loc", "") == loc:
+			out.append(Vector2i(floori(r.net_pos.x), floori(r.net_pos.z)))
+	return out
 
 
 func end_day(note: String) -> void:
@@ -702,6 +755,13 @@ func net_set_day(d: int, snow_: bool, weather_: Dictionary) -> void:
 	farm.weather = weather_
 	main.day = d
 	main.set_day(d)
+
+
+## Удар молнии: вспышка, треск, огонь и горелый след — у тех, кто в этой локации.
+@rpc("authority", "call_remote", "reliable")
+func net_strike(loc: String, x: int, y: int, fire: float, trace: float) -> void:
+	if loc == main.loc_id:
+		main.on_strike(x, y, fire, trace)
 
 
 ## Погода сменилась вручную (админ-панель хозяина).

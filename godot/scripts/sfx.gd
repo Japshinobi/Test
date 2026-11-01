@@ -25,6 +25,9 @@ var _rain: AudioStreamPlayer
 func _ready() -> void:
 	for name_ in SOUNDS:
 		_streams[name_] = _synth(SOUNDS[name_])
+	# гроза: резкий треск удара и глухой раскат вдали — из шума
+	_streams["crack"] = _burst(0.45, 0.15, 0.9, 0.004)
+	_streams["thunder"] = _burst(2.4, 0.9, 0.5, 0.35)
 	for i in 6:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
@@ -54,6 +57,28 @@ func set_rain(level: float) -> void:
 	_rain.volume_db = linear_to_db(0.35 * level)
 	if not _rain.playing:
 		_rain.play()
+
+
+## Всплеск шума: dur секунд; smooth — насколько шум глухой (0 — звонкий, ближе к 1 — гул);
+## vol — громкость; attack — за сколько секунд нарастает. Дальше затихает.
+static func _burst(dur: float, smooth: float, vol: float, attack: float) -> AudioStreamWAV:
+	var count := int(dur * RATE)
+	var data := PackedByteArray()
+	data.resize(count * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var v := 0.0
+	for i in count:
+		var t := float(i) / RATE
+		v = v * smooth + rng.randf_range(-1.0, 1.0) * (1.0 - smooth)
+		var env := minf(1.0, t / maxf(attack, 0.001)) * pow(1.0 - t / dur, 2.0)
+		data.encode_s16(i * 2, int(clampf(v * vol * env * (1.0 / maxf(1.0 - smooth, 0.08)) * 0.35, -1.0, 1.0) * 32767.0))
+	var s := AudioStreamWAV.new()
+	s.format = AudioStreamWAV.FORMAT_16_BITS
+	s.mix_rate = RATE
+	s.stereo = false
+	s.data = data
+	return s
 
 
 ## Две секунды мягкого шума (сглаженный белый шум), повторяются по кругу.

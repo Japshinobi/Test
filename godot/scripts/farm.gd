@@ -76,10 +76,22 @@ func new_weather(d: int) -> void:
 	weather = {"day": d, "today": today, "next": Weather.plan(d + 1, rng), "wet": false}
 
 
-## Погода на сегодня — вручную (админ-панель).
-func set_weather(id: String) -> void:
-	weather["today"] = Weather.fixed(id)
+## Погода на сегодня — вручную (админ-панель), с минуты minutes; удары молнии — на остаток дня.
+func set_weather(id: String, minutes := Weather.DAY_START) -> void:
+	weather["today"] = Weather.fixed(id, minutes, rng)
 	weather["wet"] = false
+
+
+## Молния ударила в грядку: посев сгорает — остаётся обгоревшее растение, его убирают, как увядшее.
+## Деревья (яблоню) молния не трогает. true — грядка изменилась.
+func burn(x: int, y: int) -> bool:
+	var p: Variant = plot_at(x, y)
+	if p == null or p["crop"] == "" or p["dead"] or crop(p["crop"]).get("tree", false):
+		return false
+	p["dead"] = true
+	p["ripe"] = false
+	p["burnt"] = true
+	return true
 
 
 ## Если сегодня уже шёл дождь — полить весь огород (один раз за день). true — грядки изменились.
@@ -281,9 +293,11 @@ func use(map: Location, peer: int, x: int, y: int, slot: int) -> Dictionary:
 				return {"msg": "Во дворе у дома копать нельзя: отойдите на пару шагов."}
 		return {}
 	if p != null and p["crop"] != "" and p["dead"]:
+		var burnt: bool = p.get("burnt", false)
 		p["crop"] = ""
 		p["dead"] = false
-		return {"msg": "Увядшее растение убрано. Грядка свободна.", "plot": true, "fx": "till"}
+		p.erase("burnt")
+		return {"msg": ("Обгоревшее" if burnt else "Увядшее") + " растение убрано. Грядка свободна.", "plot": true, "fx": "till"}
 	if p != null and p["crop"] != "" and p["ripe"]:
 		var key: String = p["crop"]
 		var n := harvest(p)

@@ -3,7 +3,8 @@ extends RefCounted
 ## Правила — из design/weather.xlsx (листы «Погода» и «Параметры»), только строки «решено» и «в игре».
 ## Погоду выбирает хозяин игры; план хранится в состоянии огорода (farm.weather) и приходит гостю вместе с ним.
 ##
-## План на день: {"am": утренняя погода, "pm": погода после смены, "at": минута начала смены (-1 — без смены)}.
+## План на день: {"am": утренняя погода, "pm": погода после смены, "at": минута начала смены (-1 — без смены),
+## "strikes": {локация: [игровые минуты ударов молнии]}} — удары выбираются заранее, пока известен план грозы.
 ## В farm.weather лежат два плана: "today" и "next" (на завтра — для будущего барометра).
 
 const Location := preload("res://scripts/location.gd")
@@ -17,19 +18,38 @@ const CHANCE := {
 	"snow": [0, 0, 0, 30],
 	"fog": [5, 5, 12, 5],
 }
-## Виды, которых ещё нет в игре, отдают свою долю другим (решение владельца 22.10.2026):
-## тучи — в «ясно», гроза — в «дождь». Когда вид появится, строку отсюда убрать.
-const FOLD := {"clouds": "clear", "storm": "rain"}
+## Виды, которых ещё нет в игре, отдают свою долю другим (так было 22.10.2026: тучи — в «ясно», гроза — в «дождь»).
+## Когда вид появляется, строку отсюда убирают. С 01.11.2026 тучи и гроза в игре — отдавать некому.
+const FOLD := {}
 
 ## Как выглядит и что делает каждый вид.
 ## light — множитель солнца (и силы теней); tint — чем подкрасить свет; fog — плотность дымки;
-## fall — что падает с неба; waters — поливает ли огород.
+## fall — что падает с неба и сколько (0..1: дождь — 0.65, ливень в грозу — 1); waters — поливает ли огород;
+## lightning — бьёт ли молния (и бывают ли вспышки с громом вдали).
 const TYPES := {
 	"clear": {"name": "Ясно", "light": 1.0, "tint": Color(1, 1, 1), "fog": 0.004, "fall": "", "waters": false},
-	"rain": {"name": "Дождь", "light": 0.35, "tint": Color(0.74, 0.78, 0.86), "fog": 0.012, "fall": "rain", "waters": true},
+	"clouds": {"name": "Тучи", "light": 0.5, "tint": Color(0.84, 0.86, 0.91), "fog": 0.007, "fall": "", "waters": false},
+	"rain": {"name": "Дождь", "light": 0.35, "tint": Color(0.74, 0.78, 0.86), "fog": 0.012, "fall": "rain", "rain": 0.65, "waters": true},
+	"storm": {"name": "Гроза", "light": 0.15, "tint": Color(0.56, 0.6, 0.72), "fog": 0.016, "fall": "rain", "rain": 1.0, "waters": true, "lightning": true},
 	"fog": {"name": "Туман", "light": 0.55, "tint": Color(0.88, 0.89, 0.92), "fog": 0.022, "fall": "", "waters": false},
 	"snow": {"name": "Снег", "light": 0.6, "tint": Color(0.9, 0.92, 0.97), "fog": 0.01, "fall": "snow", "waters": false},
 }
+## Перед дождём и грозой сначала собираются тучи (решение владельца 01.11.2026): переход BLEND минут в тучи,
+## потом дождь набирает силу за RAMP минут. Если дождь или гроза с утра — сразу.
+const GATHER := ["rain", "storm"]
+const RAMP := 20.0
+
+## Молния (лист «Параметры», решения владельца 01.11.2026): за полную грозу (с утра до полуночи) — 2 или 3 удара
+## в каждой локации; гроза часть дня — пропорционально меньше, но хотя бы 1. На рынке не бьёт: там торговцы (НПЦ).
+## Новая локация, где в грозу нет НПЦ, — добавить сюда.
+const LIGHTNING_LOCS := ["farm", "cross", "river", "forest"]
+const STRIKES_MIN := 2
+const STRIKES_MAX := 3
+const DAY_START := 6.0 * 60.0
+const DAY_END := 24.0 * 60.0
+const SAFE := 2              # молния не бьёт ближе 2 клеток к игроку
+const FIRE := [5.0, 7.0]     # огонь горит, секунд
+const TRACE := [10.0, 15.0]  # горелый след виден после огня, секунд
 
 const CHANGE_CHANCE := 0.2   # шанс, что погода сменится днём (решение владельца 22.10.2026)
 const CHANGE_FROM := 7 * 60  # смена — в любое время дня, между 7:00 и 20:00
@@ -68,27 +88,100 @@ static func plan(day: int, rng: RandomNumberGenerator) -> Dictionary:
 		if pm != am:
 			p["pm"] = pm
 			p["at"] = rng.randi_range(CHANGE_FROM, CHANGE_TO)
+	p["strikes"] = strikes(p, DAY_START, rng)
 	return p
 
 
-## Погода на весь день без смены (админ-панель).
-static func fixed(id: String) -> Dictionary:
-	return {"am": id, "pm": id, "at": -1}
+## Погода на весь день без смены (админ-панель); удары молнии — на оставшуюся часть дня с минуты from.
+static func fixed(id: String, from := DAY_START, rng: RandomNumberGenerator = null) -> Dictionary:
+	var p := {"am": id, "pm": id, "at": -1}
+	if rng:
+		p["strikes"] = strikes(p, from, rng)
+	return p
+
+
+## Части дня [начало, конец) в игровых минутах, когда идёт молниеносная погода (гроза).
+static func storm_spans(p: Dictionary, from := DAY_START) -> Array:
+	var out := []
+	var segs := _stages(p)
+	for i in segs.size():
+		if not TYPES.get(segs[i][1], {}).get("lightning", false):
+			continue
+		var a: float = maxf(float(segs[i][0]), from)
+		var b: float = float(segs[i + 1][0]) if i + 1 < segs.size() else DAY_END
+		if b > a:
+			out.append([a, b])
+	return out
+
+
+## Минуты ударов молнии в каждой локации: 2–3 за полную грозу, меньше — пропорционально её длине (но хотя бы 1).
+static func strikes(p: Dictionary, from: float, rng: RandomNumberGenerator) -> Dictionary:
+	var spans := storm_spans(p, from)
+	var total := 0.0
+	for sp in spans:
+		total += sp[1] - sp[0]
+	var out := {}
+	if total <= 0.0:
+		return out
+	for loc in LIGHTNING_LOCS:
+		var n := maxi(1, roundi(rng.randi_range(STRIKES_MIN, STRIKES_MAX) * total / (DAY_END - DAY_START)))
+		var times := []
+		for i in n:
+			# случайная минута внутри грозы
+			var r := rng.randf() * total
+			for sp in spans:
+				if r < sp[1] - sp[0]:
+					times.append(snappedf(sp[0] + r, 0.1))
+					break
+				r -= sp[1] - sp[0]
+		times.sort()
+		out[loc] = times
+	return out
+
+
+## Идёт ли гроза в эту минуту (после перехода через тучи).
+static func lightning_now(p: Dictionary, minutes: float) -> bool:
+	return TYPES.get(now(p, minutes)[0], {}).get("lightning", false)
+
+
+## Этапы дня: [минута начала, погода, сколько минут переход к ней]. Перед дождём и грозой — тучи.
+static func _stages(p: Dictionary) -> Array:
+	var am := String(p.get("am", "clear"))
+	var pm := String(p.get("pm", am))
+	var at := float(p.get("at", -1))
+	var out := [[0.0, am, 0.0]]
+	if at < 0.0 or pm == am:
+		return out
+	if pm in GATHER and am not in GATHER and am != "clouds":
+		out.append([at, "clouds", BLEND])
+		out.append([at + BLEND, pm, RAMP])
+	else:
+		out.append([at, pm, BLEND])
+	return out
 
 
 ## Какая погода сейчас и насколько прошёл переход к ней (0..1; 1 — переход закончен).
 static func now(p: Dictionary, minutes: float) -> Array:
-	var at := float(p.get("at", -1))
-	if at < 0.0 or minutes < at:
-		return [String(p.get("am", "clear")), 1.0]
-	return [String(p.get("pm", "clear")), clampf((minutes - at) / BLEND, 0.0, 1.0)]
+	var segs := _stages(p)
+	var i := _stage_at(segs, minutes)
+	var blend: float = segs[i][2]
+	return [String(segs[i][1]), 1.0 if blend <= 0.0 else clampf((minutes - float(segs[i][0])) / blend, 0.0, 1.0)]
+
+
+static func _stage_at(segs: Array, minutes: float) -> int:
+	var i := 0
+	for j in segs.size():
+		if minutes >= float(segs[j][0]):
+			i = j
+	return i
 
 
 ## Шла ли эта погода в какой-то момент дня до minutes (для полива дождём). Утренняя погода идёт с утра.
 static func had(p: Dictionary, id: String, minutes: float) -> bool:
-	if String(p.get("am", "")) == id:
-		return true
-	return int(p.get("at", -1)) >= 0 and minutes >= float(p["at"]) and String(p.get("pm", "")) == id
+	for seg in _stages(p):
+		if seg[1] == id and minutes >= float(seg[0]):
+			return true
+	return false
 
 
 static func waters_now(p: Dictionary, minutes: float) -> bool:
@@ -100,18 +193,17 @@ static func waters_now(p: Dictionary, minutes: float) -> bool:
 
 ## Как выглядит погода в эту минуту: свет, подкраска, дымка, дождь и снег (0..1), с плавным переходом.
 static func look(p: Dictionary, minutes: float) -> Dictionary:
-	var a: Dictionary = TYPES.get(String(p.get("am", "clear")), TYPES["clear"])
-	var b := a
-	var k := 0.0
-	var at := float(p.get("at", -1))
-	if at >= 0.0 and minutes >= at:
-		b = TYPES.get(String(p.get("pm", "clear")), TYPES["clear"])
-		k = clampf((minutes - at) / BLEND, 0.0, 1.0)
+	var segs := _stages(p)
+	var i := _stage_at(segs, minutes)
+	var b: Dictionary = TYPES.get(String(segs[i][1]), TYPES["clear"])
+	var a: Dictionary = TYPES.get(String(segs[i - 1][1]), TYPES["clear"]) if i > 0 else b
+	var k: float = 1.0 if float(segs[i][2]) <= 0.0 else clampf((minutes - float(segs[i][0])) / float(segs[i][2]), 0.0, 1.0)
 	return {
 		"light": lerpf(a["light"], b["light"], k),
 		"tint": (a["tint"] as Color).lerp(b["tint"], k),
 		"fog": lerpf(a["fog"], b["fog"], k),
-		"rain": lerpf(1.0 if a["fall"] == "rain" else 0.0, 1.0 if b["fall"] == "rain" else 0.0, k),
+		"rain": lerpf(float(a.get("rain", 0.0)), float(b.get("rain", 0.0)), k),
+		"storm": lerpf(1.0 if a.get("lightning", false) else 0.0, 1.0 if b.get("lightning", false) else 0.0, k),
 		"snow": lerpf(1.0 if a["fall"] == "snow" else 0.0, 1.0 if b["fall"] == "snow" else 0.0, k),
 	}
 
