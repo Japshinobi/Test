@@ -7,6 +7,7 @@ const Location := preload("res://scripts/location.gd")
 const Atlas := preload("res://scripts/atlas.gd")
 const Farm := preload("res://scripts/farm.gd")
 const Palette := preload("res://scripts/palette.gd")
+const Weather := preload("res://scripts/weather.gd")
 
 const T := 16
 ## Камера смотрит сверху под углом, и стоячие спрайты кажутся приплюснутыми. Немного вытягиваем их вверх.
@@ -36,6 +37,8 @@ var _snow := false
 var _day := 1
 var _trod_tex := {}       # картинка протоптанной клетки по названию земли под снегом
 var _market_open := false
+var _baro_arrows: Array[Node3D] = []   # стрелки барометров: показывают погоду на завтра
+var _farm: Farm
 var _frost: MeshInstance3D   # иней на земле (заморозки): полупрозрачный слой поверх земли и грядок
 var _strikes := []        # удары молнии: {bolt, fire, trace, t, fire_s, trace_s} — живут несколько секунд
 
@@ -64,6 +67,8 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 	_small_waters.clear()
 	_strikes.clear()
 	_frost = null
+	_baro_arrows.clear()
+	_farm = farm
 	_cell_sprites.clear()
 	_shake.clear()
 	var snow: bool = farm.snow and Location.season_id(day) == "winter"
@@ -91,7 +96,7 @@ func build(day: int, farm: Farm, p_map: Location, market_open: bool) -> void:
 		if d.get("model", "") == "well":
 			_well(o, season == "winter", snow)
 			continue
-		if d.get("model", "") in ["bin", "mailbox", "sign", "signpost", "barrier"]:
+		if d.get("model", "") in ["bin", "mailbox", "sign", "signpost", "barrier", "barometer"]:
 			_prop(o, d, size, snow)
 			continue
 		if not d.has("sprite") or not map.in_season(o):
@@ -345,6 +350,16 @@ func drop_distance(id: int, player: Vector3) -> float:
 		return INF
 	var p: Vector3 = _drops[id]["to"]
 	return Vector2(p.x - player.x, p.z - player.z).length()
+
+
+## Стрелка барометра — на погоду завтрашнего дня (при смене днём — на худшую из двух).
+func update_barometer() -> void:
+	if _farm == null:
+		return
+	var g := Weather.gauge(_farm.weather.get("next", {}))
+	for a in _baro_arrows:
+		if is_instance_valid(a):
+			a.rotation.z = PI - (g + 0.5) * PI / 4.0
 
 
 ## Иней: amount 0..1, light — цвет света по времени суток (ночью иней тёмный, как всё вокруг). Слой строится один раз на локацию — над землёй и грядками, кроме воды, дорог-мостов
@@ -960,6 +975,43 @@ func _prop(o: Dictionary, d: Dictionary, size: Vector2i, snow: bool) -> void:
 			st = _surface()
 			_box(st, Vector3(0.3, 1.2, 0.03), Vector3(0.33, 1.32, 0.17))
 			_add_mesh(root, st, _mat("red", _img(4, 4, Color("#e0402c"))))
+		"barometer":
+			# заглушка до этапа 3: столбик, дощечка, циферблат из 4 цветных делений — Ясно, Переменно, Дождь, Буря
+			# (слева направо по верхней половине круга); стрелка — отдельный узел, её перенесём на новую модель
+			st = _surface()
+			_box(st, Vector3(-0.05, 0, -0.05), Vector3(0.05, 0.95, 0.05))
+			_add_mesh(root, st, post)
+			st = _surface()
+			_box(st, Vector3(-0.33, 0.9, -0.06), Vector3(0.33, 1.34, 0.0))
+			_add_mesh(root, st, wood)
+			if snow:
+				st = _surface()
+				_box(st, Vector3(-0.34, 1.34, -0.07), Vector3(0.34, 1.38, 0.01))
+				_add_mesh(root, st, cap)
+			var center := Vector3(0, 0.98, 0.01)
+			var colors := [Color("#f0c64a"), Color("#b8c0cc"), Color("#4a7fd0"), Color("#4a3a6a")]
+			for i in 4:
+				st = _surface()
+				var a0 := PI - i * PI / 4.0
+				for k in 6:
+					var p0 := a0 - k * PI / 24.0
+					var p1 := a0 - (k + 1) * PI / 24.0
+					st.set_normal(Vector3.BACK)
+					for v in [center, center + Vector3(cos(p0), sin(p0), 0) * 0.28, center + Vector3(cos(p1), sin(p1), 0) * 0.28]:
+						st.set_uv(Vector2(0.5, 0.5))
+						st.add_vertex(v)
+				_add_mesh(root, st, _mat("baro_%d" % i, _img(4, 4, colors[i])))
+			var arrow := Node3D.new()
+			arrow.position = center + Vector3(0, 0, 0.02)
+			root.add_child(arrow)
+			st = _surface()
+			_box(st, Vector3(0, -0.012, 0), Vector3(0.24, 0.012, 0.015))
+			_add_mesh(arrow, st, _mat("baro_arrow", _img(4, 4, Color("#2b2b30"))))
+			st = _surface()
+			_box(st, Vector3(-0.025, -0.025, 0), Vector3(0.025, 0.025, 0.02))
+			_add_mesh(arrow, st, _mat("brass", _img(4, 4, Color("#f0bf45"))))
+			_baro_arrows.append(arrow)
+			update_barometer()
 		"sign":
 			st = _surface()
 			for px in [-0.32, 0.26]:

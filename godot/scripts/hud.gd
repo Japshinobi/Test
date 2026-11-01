@@ -441,7 +441,7 @@ const SEASON_TEXT := {
 }
 
 
-## Утро. Окно — только при событии: ночью были заморозки или сразу после пробуждения погодное событие
+## Утро. Окно — только при событии: ночью были заморозки, с утра гроза или первый снег зимы
 ## (решения владельца 22.10 и 01.11.2026). Выручка ящика и строка о полуночи — всплывающей строкой.
 ## m — итог ночи из farm.new_day.
 func show_morning(m: Dictionary, note: String) -> void:
@@ -461,20 +461,27 @@ func show_morning(m: Dictionary, note: String) -> void:
 			lines.append("Ночью были заморозки, но огород уцелел.")
 		else:
 			lines.append("Ночью были заморозки. Погибло: %s." % ", ".join(killed.keys().map(func(k): return "%s ×%d" % [String(Farm.crop(k)["name"]).to_lower(), int(killed[k])])))
+	# с утра окно — только при грозе и в 1-й день зимы (первый снег — раз в год); дождь, туман, снег — без окна
 	match String(main.farmnet.farm.weather["today"].get("am", "clear")):
-		"rain":
-			lines.append("С утра идёт дождь. Огород полит на весь день.")
 		"storm":
 			lines.append("С утра гроза. Молния может сжечь посевы.")
-		"fog":
-			lines.append("С утра всё окутал туман.")
 		"snow":
-			lines.append("Пошёл первый снег. Зима вступила в свои права." if Location.season_day(day) == 1 else "С утра идёт снег.")
+			if Location.season_id(day) == "winter" and Location.season_day(day) == 1:
+				lines.append("Пошёл первый снег. Зима вступила в свои права.")
 	if lines.is_empty():
 		return
 	var v := _open("morning", "%s, день %d из %d" % [main.season_text(), Location.season_day(day), Location.SEASON_DAYS], 620)
 	_text(v, "\n\n".join(lines), 16)
 	_button(_buttons(v), "Доброе утро!", close_dialog)
+
+
+## Окно барометра: прогноз на завтра и, если этой ночью заморозки, предупреждение.
+func show_forecast() -> void:
+	var w: Dictionary = main.farmnet.farm.weather
+	var text := Weather.forecast(w.get("next", {}))
+	if int(w.get("frost", -1)) == main.day:
+		text += "\n\nЭтой ночью заморозки: теплолюбивые посевы могут погибнуть."
+	show_message("Барометр", text)
 
 
 ## «монету», «монеты» или «монет» — по числу: 1 монету, 2 монеты, 5 монет, 11 монет, 21 монету.
@@ -579,6 +586,15 @@ func open_admin() -> void:
 				main.admin_set_weather(id)
 				open_admin())
 			if id == now:
+				b.add_theme_stylebox_override("normal", _box(Color("#4a63a8"), Color("#f0cf7a"), 2))
+		var hn := _buttons(v)
+		_text(hn, "Завтра:", 15).autowrap_mode = TextServer.AUTOWRAP_OFF
+		var nx := String(main.farmnet.farm.weather.get("next", {}).get("am", "clear"))
+		for id in Weather.TYPES:
+			var b := _button(hn, Weather.name_of(id), func() -> void:
+				main.admin_set_weather_next(id)
+				open_admin())
+			if id == nx:
 				b.add_theme_stylebox_override("normal", _box(Color("#4a63a8"), Color("#f0cf7a"), 2))
 		var hf := _buttons(v)
 		_button(hf, "Заморозки этой ночью", func() -> void:

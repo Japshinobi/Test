@@ -28,6 +28,7 @@
 		{"id": "well", "name": "Колодец", "group": "Постройки", "sprite": "well", "model": "well", "snow": true},
 		{"id": "bin", "name": "Ящик для продажи", "group": "Постройки", "sprite": "bin", "model": "bin", "snow": true},
 		{"id": "mailbox", "name": "Почтовый ящик", "group": "Постройки", "sprite": "mailbox", "model": "mailbox", "snow": true},
+		{"id": "barometer", "name": "Барометр", "group": "Постройки", "sprite": "sign", "model": "barometer", "snow": true},
 		{"id": "sign", "name": "Табличка", "group": "Постройки", "sprite": "sign", "model": "sign", "snow": true, "props": ["text"]},
 		{"id": "stake", "name": "Колышек", "group": "Постройки", "sprite": "stake", "snow": true, "block": false, "shadow": false},
 		{"id": "signpost", "name": "Указатель", "group": "Постройки", "sprite": "signpost", "model": "signpost", "snow": true, "props": ["text"]},

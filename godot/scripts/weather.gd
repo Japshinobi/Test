@@ -240,5 +240,33 @@ static func frost_amount(w: Dictionary, day: int, minutes: float) -> float:
 	return 0.0
 
 
+## Барометр (лист «Параметры», решения владельца 01.11.2026): показывает погоду на завтра — план next, он же
+## утром станет погодой дня, поэтому прогноз всегда точный. Стрелка: 4 деления; при смене днём — худшая погода.
+const GAUGE := {"clear": 0, "clouds": 1, "fog": 1, "snow": 1, "rain": 2, "storm": 3}
+const GAUGE_NAMES := ["Ясно", "Переменно", "Дождь", "Буря"]
+const FORECAST := {"clear": "ясно", "clouds": "пасмурно", "rain": "дождь", "storm": "гроза", "fog": "туман", "snow": "снег"}
+const LATER := {"clear": "днём прояснится", "clouds": "днём затянет тучами", "rain": "днём возможен дождь",
+	"storm": "днём возможна гроза", "fog": "днём возможен туман", "snow": "днём возможен снег"}
+
+
+## Деление стрелки барометра (0 — Ясно … 3 — Буря) для плана дня.
+static func gauge(p: Dictionary) -> int:
+	var am := String(p.get("am", "clear"))
+	var g: int = GAUGE.get(am, 0)
+	if int(p.get("at", -1)) >= 0:
+		g = maxi(g, GAUGE.get(String(p.get("pm", am)), 0))
+	return g
+
+
+## Текст прогноза: «Завтра: ясно» или «Завтра: ясно, днём возможен дождь».
+static func forecast(p: Dictionary) -> String:
+	var am := String(p.get("am", "clear"))
+	var pm := String(p.get("pm", am))
+	var t := "Завтра: %s" % FORECAST.get(am, am)
+	if int(p.get("at", -1)) >= 0 and pm != am:
+		t += ", " + String(LATER.get(pm, pm))
+	return t
+
+
 static func name_of(id: String) -> String:
 	return TYPES.get(id, TYPES["clear"])["name"]

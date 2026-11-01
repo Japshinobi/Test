@@ -186,6 +186,11 @@ func admin_set_day(d: int) -> void:
 	farmnet.check_rain(minutes)
 
 
+## Админ-панель: погода на завтра вручную (решает хозяин, видят все).
+func admin_set_weather_next(id: String) -> void:
+	farmnet.set_weather_next(id)
+
+
 ## Админ-панель: заморозки в эту ночь (решает хозяин, видят все).
 func admin_frost_tonight() -> void:
 	farmnet.set_frost_tonight()
@@ -290,9 +295,10 @@ func _far_storm(delta: float) -> void:
 		_far_thunder = 0.6 + Location.hash3(day, slot, 42) * 1.4
 
 
-## Погода сменилась (админ-панель): сразу перерисовать свет, дождь и снег.
+## Погода сменилась (админ-панель): сразу перерисовать свет, дождь и снег, стрелку барометра.
 func update_weather() -> void:
 	_update_light(true)
+	world.update_barometer()
 
 
 ## Падающий снег и дождь вокруг камеры; сколько их — решает погода (_update_fall).

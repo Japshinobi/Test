@@ -221,6 +221,8 @@ func act(cell: Vector2i) -> void:
 		match id:
 			"bin":
 				hud.open_ship()
+			"barometer":
+				hud.show_forecast()
 			"mailbox":
 				hud.show_message("Почтовый ящик", "Писем пока нет. Сюда будут приходить извещения: о смене сезона, о погоде и другие новости.")
 			"sign":
@@ -489,6 +491,14 @@ func set_weather(id: String) -> void:
 	farm.set_weather(id, main.minutes)
 	_all("net_weather", [farm.weather])
 	check_rain(main.minutes)
+
+
+## Только у хозяина: погода на завтра вручную (админ-панель); барометр сразу её показывает, завтра она и будет.
+func set_weather_next(id: String) -> void:
+	if not is_host():
+		return
+	farm.weather["next"] = Weather.fixed(id, Weather.DAY_START, farm.rng)
+	_all("net_weather", [farm.weather])
 
 
 ## Только у хозяина: заморозки в эту ночь (админ-панель).
