@@ -345,7 +345,8 @@ func drop_distance(id: int, player: Vector3) -> float:
 	return Vector2(p.x - player.x, p.z - player.z).length()
 
 
-## Удар молнии в клетку: яркий штрих с неба, огонь fire секунд, потом горелый след ещё trace секунд.
+## Удар молнии в клетку: яркий штрих с неба, огонь fire секунд, потом горелый след ещё trace секунд
+## (trace = 0 — следа нет: на грядке после огня остаётся обгоревшее растение).
 ## Огонь и след пока простые (искры и тёмное пятно) — свои рисунки на этапе 3.
 func strike_fx(x: int, y: int, fire: float, trace: float) -> void:
 	var at := Vector3(x + 0.5, 0, y + 0.5)
@@ -371,6 +372,7 @@ func strike_fx(x: int, y: int, fire: float, trace: float) -> void:
 	trace_mi.material_override = tm
 	trace_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	trace_mi.position = at + Vector3(0, 0.025, 0)
+	trace_mi.visible = trace > 0.0
 	content.add_child(trace_mi)
 	var fire_p := CPUParticles3D.new()
 	fire_p.amount = 36

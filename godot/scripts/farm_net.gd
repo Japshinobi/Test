@@ -506,7 +506,7 @@ func check_lightning(minutes: float) -> void:
 				strike_lightning(String(loc))
 
 
-## Удар молнии в локации loc: случайная клетка, куда может пройти персонаж, не ближе 2 клеток к игрокам,
+## Удар молнии в локации loc: случайная клетка, куда может пройти персонаж, не в клетку игрока и не в соседние (3×3),
 ## без деревьев (и яблони на грядке). Посев на клетке сгорает; огонь и след видят все, кто в этой локации.
 func strike_lightning(loc: String) -> Vector2i:
 	var map: Location = Location.get_loc(loc)
@@ -525,9 +525,12 @@ func strike_lightning(loc: String) -> Vector2i:
 				close = true
 		if close:
 			continue
-		if loc == "farm" and farm.burn(c.x, c.y):
+		# посев сгорает: огонь, потом обгоревшее растение — без горелого следа (решение владельца 01.11.2026)
+		var burnt := loc == "farm" and farm.burn(c.x, c.y)
+		if burnt:
 			_all("net_plot", [c.x, c.y, farm.plot_at(c.x, c.y)])
-		_all("net_strike", [loc, c.x, c.y, farm.rng.randf_range(Weather.FIRE[0], Weather.FIRE[1]), farm.rng.randf_range(Weather.TRACE[0], Weather.TRACE[1])])
+		var trace := 0.0 if burnt else farm.rng.randf_range(Weather.TRACE[0], Weather.TRACE[1])
+		_all("net_strike", [loc, c.x, c.y, farm.rng.randf_range(Weather.FIRE[0], Weather.FIRE[1]), trace])
 		return c
 	return Vector2i(-1, -1)
 
